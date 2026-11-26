@@ -39,10 +39,20 @@ class TtsEngineSelector(
 
         when (mode) {
             TtsMode.OFFLINE -> {
-                if (isOfflineModelInstalled()) {
-                    getOfflineTtsManager().speak(text, queueMode, voiceIdOverride)
+                // Не полагаемся только на «файл модели есть»: native-движок может не
+                // подняться (битая распаковка, нехватка памяти, конфликт движков), и
+                // тогда человек слышит тишину, хотя ответ пришёл. Проверяем готовность
+                // синхронно и падаем на облачный/системный голос — лучше чужой голос,
+                // чем молчание.
+                val offline = getOfflineTtsManager()
+                val voiceId = voiceIdOverride ?: settingsRepository.voiceIdForText(text)
+                val ready = isOfflineModelInstalled() &&
+                    (offline.ensureVoiceReady(voiceId) || offline.ensureAnyReady())
+                if (ready) {
+                    offline.speak(text, queueMode, voiceIdOverride)
                 } else {
-                    getNativeTtsManager().speak(text, queueMode, voiceIdOverride)
+                    android.util.Log.w("TtsEngineSelector", "Offline voice unavailable, falling back to API/Native")
+                    getApiTtsManager().speak(text, queueMode, voiceIdOverride)
                 }
             }
             TtsMode.API -> {

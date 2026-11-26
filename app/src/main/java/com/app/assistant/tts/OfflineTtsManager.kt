@@ -63,6 +63,13 @@ class OfflineTtsManager(
      * русского). Движок кэшируется по voiceId, чтобы частые переключения агентов не
      * перезагружали модель.
      */
+    /** Готов ли движок этого голоса (поднимает его синхронно, если ещё нет). */
+    fun ensureVoiceReady(voiceId: String): Boolean = initTtsEngine(voiceId) != null
+
+    /** Готов ли хоть один установленный голос — запасной путь, когда нужного нет. */
+    fun ensureAnyReady(): Boolean =
+        modelManager.installedVoices().any { initTtsEngine(it) != null }
+
     @Synchronized
     private fun initTtsEngine(voiceId: String): OfflineTts? {
         engines[voiceId]?.let { return it }
