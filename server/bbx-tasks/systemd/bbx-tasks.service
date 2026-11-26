@@ -1,0 +1,25 @@
+[Unit]
+Description=bbx-tasks — task manager for ai-assistant-android and the secretary agent
+Documentation=file:/root/ai-assistant-android/specs/TASKS-SPEC-2.0.md
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=bbx
+Group=bbx
+WorkingDirectory=/opt/bbx-tasks
+EnvironmentFile=/opt/bbx-tasks/etc/tasks.env
+ExecStart=/usr/bin/node /opt/bbx-tasks/dist/main.js
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/opt/bbx-tasks
+
+[Install]
+WantedBy=multi-user.target
