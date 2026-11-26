@@ -316,5 +316,12 @@ class SettingsRepository(
         }
         com.app.assistant.tts.TtsEngine.NATIVE -> null
     }
+
+    /** Явно выбранный агент для новых сообщений; "" = авто (по имени в тексте). */
+    fun getSelectedAgent(): String = sharedPreferences.getString("selected_agent", "") ?: ""
+
+    fun setSelectedAgent(agentName: String) {
+        sharedPreferences.edit().putString("selected_agent", agentName).apply()
+    }
 }
 
