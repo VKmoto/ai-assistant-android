@@ -306,6 +306,7 @@ class MainActivity : ComponentActivity() {
                 // не озвучивались — слышны были только служебные реплики. Перебивание
                 // по-прежнему работает: когда человек начинает говорить, onBeginningOfSpeech
                 // останавливает TTS.
+                com.app.assistant.util.TtsTrace.add("activity", "SpeakText len=${event.text.length} q=${event.queueMode} listening=${viewModel.isListening.value} speaking=${viewModel.isSpeaking.value}")
                 textToSpeechManager.speak(event.text, event.queueMode)
             }
 

@@ -96,7 +96,8 @@ class OfflineTtsManager(
     private fun initTtsEngine(voiceId: String): OfflineTts? {
         engines[voiceId]?.let { return it }
         if (!modelManager.isModelDownloaded(voiceId)) {
-            Log.w("OfflineTtsManager", "Voice $voiceId is not downloaded")
+            android.util.Log.w("OfflineTtsManager", "Voice $voiceId is not downloaded")
+            com.app.assistant.util.TtsTrace.add("offline", "init SKIP voice=$voiceId not downloaded")
             return null
         }
         return try {
@@ -121,6 +122,7 @@ class OfflineTtsManager(
             // JNI принимает AssetManager=null при абсолютных путях.
             val tts = OfflineTts(null, config)
             engines[voiceId] = tts
+            com.app.assistant.util.TtsTrace.add("offline", "init OK voice=$voiceId")
             tts
         } catch (e: Exception) {
             Log.e("OfflineTtsManager", "Failed to initialize voice $voiceId", e)
@@ -174,6 +176,7 @@ class OfflineTtsManager(
                     }
                     val floatSamples = audio.samples
                     val sampleRate = audio.sampleRate
+                    com.app.assistant.util.TtsTrace.add("offline", "generate voice=$voiceId text=${cleanedText.length} samples=${floatSamples.size} rate=$sampleRate")
 
                     if (floatSamples.isEmpty()) {
                         Log.w("OfflineTtsManager", "Empty audio for voice $voiceId, falling back to online TTS")

@@ -866,6 +866,7 @@ class MainViewModel(
     }
 
     internal fun speakResponse(plaintext: String, queueMode: Int = 0) {
+        com.app.assistant.util.TtsTrace.add("vm", "speak len=${plaintext.length} q=$queueMode head=${plaintext.take(30)}")
         viewModelScope.launch {
             _uiEvent.send(UIEvent.SpeakText(plaintext, queueMode))
         }

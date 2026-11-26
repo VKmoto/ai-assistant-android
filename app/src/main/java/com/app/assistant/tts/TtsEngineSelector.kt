@@ -39,6 +39,7 @@ class TtsEngineSelector(
             apiTtsManager?.stop()
         }
 
+        com.app.assistant.util.TtsTrace.add("selector", "speak mode=$mode len=${text.length} override=${voiceIdOverride ?: "-"}")
         when (mode) {
             TtsMode.OFFLINE -> {
                 // Не полагаемся только на «файл модели есть»: native-движок может не
@@ -50,6 +51,7 @@ class TtsEngineSelector(
                 val voiceId = voiceIdOverride ?: settingsRepository.voiceIdForText(text)
                 val ready = isOfflineModelInstalled() &&
                     (offline.ensureVoiceReady(voiceId) || offline.ensureAnyReady())
+                com.app.assistant.util.TtsTrace.add("selector", "mode=OFFLINE voice=$voiceId ready=$ready len=${text.length}")
                 if (ready) {
                     offline.speak(text, queueMode, voiceIdOverride)
                 } else {

@@ -342,6 +342,11 @@ class SettingsViewModel(
         previewEdge?.shutdown()
     }
 
+    /** Журнал пути «текст → звук» для диагностики озвучки. */
+    fun ttsTrace(): String = com.app.assistant.util.TtsTrace.dump()
+
+    fun clearTtsTrace() = com.app.assistant.util.TtsTrace.clear()
+
     fun setDefaultVoice(voiceId: String) {
         settingsRepository.setDefaultVoiceId(voiceId)
         _defaultVoiceId.value = voiceId
