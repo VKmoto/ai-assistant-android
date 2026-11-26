@@ -1,8 +1,6 @@
 package com.app.assistant.ui.screen
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -15,143 +13,149 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
-import com.app.assistant.tts.VoiceCatalog
+import androidx.compose.ui.unit.sp
+import com.app.assistant.tts.TtsEngine
+import com.app.assistant.tts.TtsMode
+import com.app.assistant.tts.VoiceOption
 import com.app.assistant.viewmodel.SettingsViewModel
 
 /**
- * Настройки русских голосов синтеза и привязки голосов к агентам.
+ * Выбор голоса для ТЕКУЩЕГО движка синтеза.
  *
- * Владелец 2026-11-26: «каждый агент должен говорить своим голосом», Старпом и Масяня —
- * женским (Ирина), Док — мужским. Поэтому здесь два независимых блока:
- *   1) какие офлайн-голоса скачаны (64 МБ каждый, скачиваются по одному);
- *   2) кто каким голосом говорит. Привязка хранится по имени агента и применяется по
- *      префиксу «[Имя]» в ответе — роутер ставит его сам, приложение ничего не угадывает.
+ * Владелец 2026-11-26: «дай выбор голосов для любых голосовых движков, пусть выбор
+ * зависит от того, какой движок включён». Поэтому список голосов строится по режиму:
+ *   OFFLINE → Piper (модели скачиваются, 4 голоса)
+ *   API + Edge → Светлана/Дмитрий (у Edge только два русских голоса)
+ *   API + Google → четыре Wavenet
+ *   NATIVE → установленные в Android русские голоса (спрашиваем TextToSpeech)
+ * Привязки агентов хранятся отдельно для каждого движка, поэтому переключение режима
+ * не теряет выбор и не подставляет чужой id.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun OfflineVoicesSection(settingsViewModel: SettingsViewModel) {
+    val mode by settingsViewModel.ttsMode.collectAsState()
     val installed by settingsViewModel.installedVoices.collectAsState()
     val downloading by settingsViewModel.downloadingVoice.collectAsState()
-    val defaultVoice by settingsViewModel.defaultVoiceId.collectAsState()
+    val defaultVoices by settingsViewModel.defaultVoices.collectAsState()
     val agentNames by settingsViewModel.agentVoiceNames.collectAsState()
-    val agentVoices by settingsViewModel.agentVoices.collectAsState()
+    val agentVoicesByEngine by settingsViewModel.agentVoices.collectAsState()
+    val nativeVoices by settingsViewModel.nativeVoices.collectAsState()
+
+    val engine = settingsViewModel.currentEngine()
+    val options: List<VoiceOption> = when (engine) {
+        TtsEngine.NATIVE -> nativeVoices
+        else -> settingsViewModel.voiceOptionsFor(engine)
+    }
+    val defaultVoice = defaultVoices[engine.name]?.takeIf { it in options.map { o -> o.id } }
+        ?: options.firstOrNull()?.id ?: ""
+    val agentVoices = agentVoicesByEngine[engine.name] ?: emptyMap()
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        Text("Русские голоса (офлайн)", style = MaterialTheme.typography.titleSmall)
-        Text(
-            "Модели Piper, ~64 МБ каждая. Скачайте нужные: переключение между ними " +
-                "не требует интернета, а у каждого агента может быть свой голос.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        Text(titleFor(engine), style = MaterialTheme.typography.titleSmall)
+        Text(descriptionFor(engine, mode), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(8.dp))
 
-        VoiceCatalog.voices.forEach { voice ->
-            val isInstalled = installed.contains(voice.id)
-            val isDownloading = downloading == voice.id
+        if (options.isEmpty()) {
+            Text(
+                if (engine == TtsEngine.NATIVE) "В системе нет установленных русских голосов синтеза."
+                else "Нет доступных голосов для этого движка.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+
+        options.forEach { voice ->
+            val isPiper = engine == TtsEngine.PIPER
+            val isInstalled = !isPiper || installed.contains(voice.id)
+            val isDownloading = isPiper && downloading == voice.id
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                RadioButton(
+                    selected = defaultVoice == voice.id,
+                    onClick = { settingsViewModel.setDefaultVoice(engine, voice.id) },
+                )
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("${voice.title} · ${voice.gender}", style = MaterialTheme.typography.bodyMedium)
+                    Text(voice.title, style = MaterialTheme.typography.bodyMedium)
                     Text(
-                        if (isInstalled) "Установлен" else "~${voice.sizeMb} МБ, не загружен",
+                        if (isPiper && !isInstalled) "${voice.subtitle} · не загружен" else voice.subtitle,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                IconButton(onClick = { settingsViewModel.previewVoice(voice.id) }) {
-                    Icon(
-                        imageVector = Icons.Filled.PlayArrow,
-                        contentDescription = "Прослушать голос ${voice.title}",
-                    )
+                IconButton(onClick = { settingsViewModel.previewVoice(engine, voice.id) }) {
+                    Icon(Icons.Filled.PlayArrow, contentDescription = "Прослушать ${voice.title}")
                 }
-                if (isDownloading) {
-                    CircularProgressIndicator(modifier = Modifier.size(28.dp))
-                    Spacer(Modifier.width(8.dp))
-                    OutlinedButton(onClick = { settingsViewModel.cancelTtsModelDownload() }) {
-                        Text("Отмена")
-                    }
-                } else if (isInstalled) {
-                    OutlinedButton(onClick = { settingsViewModel.deleteTtsModel(voice.id) }) {
-                        Text("Удалить")
-                    }
-                } else {
-                    Button(onClick = { settingsViewModel.startTtsModelDownload(voice.id) }) {
-                        Text("Скачать")
+                if (isPiper) {
+                    when {
+                        isDownloading -> {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                            Spacer(Modifier.width(6.dp))
+                            OutlinedButton(onClick = { settingsViewModel.cancelTtsModelDownload() }) {
+                                Text("Отмена")
+                            }
+                        }
+                        isInstalled -> OutlinedButton(onClick = { settingsViewModel.deleteTtsModel(voice.id) }) {
+                            Text("Удалить")
+                        }
+                        else -> Button(onClick = { settingsViewModel.startTtsModelDownload(voice.id) }) {
+                            Text("Скачать")
+                        }
                     }
                 }
             }
         }
 
-        Spacer(Modifier.height(16.dp))
-        Text("Голос по умолчанию", style = MaterialTheme.typography.titleSmall)
-        Text(
-            "Им говорят служебные сообщения и агенты без своей привязки.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(6.dp))
-        // FlowRow, а не Row: четыре чипа не помещаются в ширину экрана, и последний
-        // («Руслан») вылезал за край — на скриншоте владельца от него осталась полоска.
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            VoiceCatalog.voices.forEach { voice ->
-                FilterChip(
-                    selected = defaultVoice == voice.id,
-                    onClick = { settingsViewModel.setDefaultVoice(voice.id) },
-                    label = { Text(voice.title) },
+        if (options.isNotEmpty()) {
+            Spacer(Modifier.height(16.dp))
+            Text("Голос по умолчанию", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "Им говорят служебные сообщения и агенты без своей привязки. Выбор — радиокнопкой в списке выше.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            Spacer(Modifier.height(12.dp))
+            Text("Голос агентов", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "Агент определяется по префиксу «[Имя]» в начале ответа. Привязки хранятся отдельно для каждого движка.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            agentNames.forEach { name ->
+                AgentVoiceRow(
+                    agentName = name,
+                    options = options,
+                    stored = agentVoices[name] ?: defaultVoice,
+                    onSelect = { settingsViewModel.setAgentVoice(engine, name, it) },
+                    onPreview = { settingsViewModel.previewVoice(engine, agentVoices[name] ?: defaultVoice) },
                 )
             }
-        }
-
-        Spacer(Modifier.height(16.dp))
-        Text("Голос агентов", style = MaterialTheme.typography.titleSmall)
-        Text(
-            "Агент определяется по префиксу «[Имя]» в начале ответа. " +
-                "Список пополняется сам, когда агент впервые отвечает.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(6.dp))
-        agentNames.forEach { name ->
-            AgentVoiceRow(
-                agentName = name,
-                stored = agentVoices[name],
-                settingsViewModel = settingsViewModel,
-                defaultVoice = defaultVoice,
-            )
         }
 
         Spacer(Modifier.height(16.dp))
@@ -161,9 +165,7 @@ fun OfflineVoicesSection(settingsViewModel: SettingsViewModel) {
         OutlinedButton(onClick = {
             traceText = settingsViewModel.ttsTrace()
             showTrace = true
-        }) {
-            Text("Диагностика синтеза")
-        }
+        }) { Text("Диагностика синтеза") }
         if (showTrace) {
             AlertDialog(
                 onDismissRequest = { showTrace = false },
@@ -173,9 +175,7 @@ fun OfflineVoicesSection(settingsViewModel: SettingsViewModel) {
                         text = traceText,
                         fontFamily = FontFamily.Monospace,
                         fontSize = 11.sp,
-                        modifier = Modifier
-                            .height(360.dp)
-                            .verticalScroll(rememberScrollState()),
+                        modifier = Modifier.height(360.dp).verticalScroll(rememberScrollState()),
                     )
                 },
                 confirmButton = {
@@ -184,9 +184,7 @@ fun OfflineVoicesSection(settingsViewModel: SettingsViewModel) {
                         showTrace = false
                     }) { Text("Копировать") }
                 },
-                dismissButton = {
-                    TextButton(onClick = { showTrace = false }) { Text("Закрыть") }
-                },
+                dismissButton = { TextButton(onClick = { showTrace = false }) { Text("Закрыть") } },
             )
         }
     }
@@ -195,39 +193,52 @@ fun OfflineVoicesSection(settingsViewModel: SettingsViewModel) {
 @Composable
 private fun AgentVoiceRow(
     agentName: String,
-    stored: String?,
-    settingsViewModel: SettingsViewModel,
-    defaultVoice: String,
+    options: List<VoiceOption>,
+    stored: String,
+    onSelect: (String) -> Unit,
+    onPreview: () -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
-    val current = VoiceCatalog.byId(stored ?: defaultVoice)
-
+    val current = options.firstOrNull { it.id == stored } ?: options.firstOrNull()
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(agentName, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-        IconButton(onClick = { settingsViewModel.previewVoice(current.id) }) {
-            Icon(
-                imageVector = Icons.Filled.PlayArrow,
-                contentDescription = "Прослушать голос агента $agentName",
-            )
+        IconButton(onClick = onPreview) {
+            Icon(Icons.Filled.PlayArrow, contentDescription = "Прослушать голос агента $agentName")
         }
         OutlinedButton(onClick = { expanded = true }) {
-            Text("${current.title}${if (stored == null) " (по умолчанию)" else ""}")
+            Text(current?.title ?: "—")
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            VoiceCatalog.voices.forEach { voice ->
+            options.forEach { voice ->
                 DropdownMenuItem(
-                    text = { Text("${voice.title} · ${voice.gender}") },
+                    text = { Text("${voice.title} · ${voice.subtitle}") },
                     onClick = {
                         expanded = false
-                        settingsViewModel.setAgentVoice(agentName, voice.id)
+                        onSelect(voice.id)
                     },
                 )
             }
         }
     }
+}
+
+private fun titleFor(engine: TtsEngine): String = when (engine) {
+    TtsEngine.PIPER -> "Голоса Piper (офлайн)"
+    TtsEngine.EDGE -> "Голоса Edge TTS (онлайн)"
+    TtsEngine.GOOGLE -> "Голоса Google TTS (онлайн)"
+    TtsEngine.NATIVE -> "Системные голоса Android"
+}
+
+private fun descriptionFor(engine: TtsEngine, mode: TtsMode): String = when (engine) {
+    TtsEngine.PIPER ->
+        "Модели Piper, ~64 МБ каждая. Скачайте нужные: работают без интернета, у каждого агента может быть свой голос."
+    TtsEngine.EDGE ->
+        "Edge TTS — облачный, бесплатный. Русских голосов у сервиса только два, поэтому уникальность между агентами ограничена."
+    TtsEngine.GOOGLE ->
+        "Google Cloud TTS — облачный, нужен API-ключ. Четыре русских голоса Wavenet."
+    TtsEngine.NATIVE ->
+        "Системный синтез Android: голоса, установленные в системе. Ничего скачивать не нужно."
 }

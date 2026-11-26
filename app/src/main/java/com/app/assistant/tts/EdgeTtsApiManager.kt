@@ -109,7 +109,11 @@ class EdgeTtsApiManager(
                 idleTimeoutJob?.cancel()
 
                 val sentences = splitIntoSentences(text)
-                com.app.assistant.util.TtsTrace.add("edge", "synth voice=${VoiceCatalog.byId(item.voiceIdOverride ?: settingsRepository.voiceIdForText(text)).id} sentences=${sentences.size} len=${text.length}")
+                com.app.assistant.util.TtsTrace.add(
+                    "edge",
+                    "synth voice=${item.voiceIdOverride ?: settingsRepository.voiceIdForText(text, TtsEngine.EDGE)} " +
+                        "sentences=${sentences.size} len=${text.length}",
+                )
                 for (sentence in sentences) {
                     val cleaned = cleanTextForTts(sentence)
                     if (cleaned.isEmpty()) continue
@@ -492,8 +496,9 @@ class EdgeTtsApiManager(
         // Голос выбирается по агенту из префикса «[Имя]»: у Edge TTS русских голосов
         // всего два (Светлана/Дмитрий), поэтому женские офлайн-голоса идут на Светлану,
         // мужские — на Дмитрия; уникальность обеспечивает офлайн-режим.
-        val voice = VoiceCatalog.byId(voiceIdOverride ?: settingsRepository.voiceIdForText(text))
-        val voiceName = voice.onlineVoice
+        val voiceName = voiceIdOverride
+            ?: settingsRepository.voiceIdForText(text, TtsEngine.EDGE)
+            .ifEmpty { "ru-RU-SvetlanaNeural" }
         val langCode = if (voiceName.startsWith("ru-")) "ru-RU" else "en-US"
         val ssmlMsg = "X-RequestId:$requestId\r\n" +
                 "Content-Type:application/ssml+xml\r\n" +

@@ -11,6 +11,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 class NativeTtsManager(
     private val context: Context,
+    private val settingsRepository: com.app.assistant.repository.SettingsRepository,
     private val onSpeakingStateChanged: (isSpeaking: Boolean) -> Unit
 ) : TtsManager {
     private var textToSpeech: TextToSpeech? = null
@@ -74,6 +75,17 @@ class NativeTtsManager(
 
     override fun speak(text: String, queueMode: Int, voiceIdOverride: String?) {
         val tts = textToSpeech
+        // Системный синтез тоже умеет разные голоса: выбираем тот, что привязан к
+        // агенту в настройках, иначе — голос движка по умолчанию.
+        val wanted = voiceIdOverride ?: settingsRepository.voiceIdForText(text, TtsEngine.NATIVE)
+        if (wanted.isNotEmpty()) {
+            tts?.voices?.firstOrNull { it.name == wanted }?.let { voice ->
+                runCatching {
+                    tts.voice = voice
+                    tts.language = voice.locale
+                }
+            }
+        }
         if (tts == null) {
             Log.w("NativeTtsManager", "TTS is null")
             return

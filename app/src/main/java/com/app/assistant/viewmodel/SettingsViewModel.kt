@@ -74,16 +74,30 @@ class SettingsViewModel(
     private val _downloadingVoice = MutableStateFlow<String?>(null)
     val downloadingVoice: StateFlow<String?> = _downloadingVoice.asStateFlow()
 
-    private val _defaultVoiceId = MutableStateFlow(settingsRepository.getDefaultVoiceId())
-    val defaultVoiceId: StateFlow<String> = _defaultVoiceId.asStateFlow()
+    private val _ttsMode = MutableStateFlow(settingsRepository.getTtsMode())
+    val ttsMode: StateFlow<com.app.assistant.tts.TtsMode> = _ttsMode.asStateFlow()
+
+    /** Голоса по умолчанию по каждому движку (ключ — имя TtsEngine). */
+    private val _defaultVoices = MutableStateFlow(
+        com.app.assistant.tts.TtsEngine.entries.associate { it.name to settingsRepository.getDefaultVoice(it) },
+    )
+    val defaultVoices: StateFlow<Map<String, String>> = _defaultVoices.asStateFlow()
+
+    /** Системные (Android TextToSpeech) русские голоса — появляются после инициализации. */
+    private val _nativeVoices = MutableStateFlow<List<com.app.assistant.tts.VoiceOption>>(emptyList())
+    val nativeVoices: StateFlow<List<com.app.assistant.tts.VoiceOption>> = _nativeVoices.asStateFlow()
+
+    private var nativeTtsProbe: android.speech.tts.TextToSpeech? = null
 
     /** Имена агентов, которых мы видели (для списка настроек). */
     private val _agentVoiceNames = MutableStateFlow(settingsRepository.getKnownAgentNames())
     val agentVoiceNames: StateFlow<List<String>> = _agentVoiceNames.asStateFlow()
 
     /** Привязки «агент -> голос»; отсутствие ключа = голос по умолчанию. */
-    private val _agentVoices = MutableStateFlow(settingsRepository.getAgentVoices())
-    val agentVoices: StateFlow<Map<String, String>> = _agentVoices.asStateFlow()
+    private val _agentVoices = MutableStateFlow(
+        com.app.assistant.tts.TtsEngine.entries.associate { it.name to settingsRepository.getAgentVoices(it) },
+    )
+    val agentVoices: StateFlow<Map<String, Map<String, String>>> = _agentVoices.asStateFlow()
 
     private val _isTranslationEnabled = MutableStateFlow(settingsRepository.getIsTranslationEnabled())
     val isTranslationEnabled: StateFlow<Boolean> = _isTranslationEnabled.asStateFlow()
@@ -104,6 +118,27 @@ class SettingsViewModel(
     val isDefaultAssistant: StateFlow<Boolean> = _isDefaultAssistant.asStateFlow()
 
     init {
+        // Системный синтез тоже предлагает голоса: спрашиваем Android, какие русские
+        // голоса установлены, чтобы их можно было выбрать наравне с Piper/Edge/Google.
+        nativeTtsProbe = android.speech.tts.TextToSpeech(settingsRepository.context) { status ->
+            if (status == android.speech.tts.TextToSpeech.SUCCESS) {
+                val tts = nativeTtsProbe
+                val voices = tts?.voices
+                    ?.filter { it.locale.language == "ru" }
+                    ?.sortedBy { it.name }
+                    ?.map {
+                        com.app.assistant.tts.VoiceOption(
+                            engine = com.app.assistant.tts.TtsEngine.NATIVE,
+                            id = it.name,
+                            title = it.name,
+                            subtitle = "Системный · ${it.locale}",
+                        )
+                    }
+                    ?: emptyList()
+                _nativeVoices.value = voices
+                runCatching { tts?.setLanguage(java.util.Locale("ru")) }
+            }
+        }
         translationLanguages = getPublicStaticFinalStringsWithNames(TranslateLanguage::class.java)
         refreshDownloadedTranslationModels()
         checkDefaultAssistantStatus()
@@ -315,9 +350,28 @@ class SettingsViewModel(
 
     private var previewEdge: com.app.assistant.tts.EdgeTtsApiManager? = null
 
-    fun previewVoice(voiceId: String) {
-        val voice = com.app.assistant.tts.VoiceCatalog.byId(voiceId)
-        val text = "Привет! Меня зовут ${voice.title}. Так я буду говорить."
+    fun previewVoice(engine: com.app.assistant.tts.TtsEngine, voiceId: String) {
+        val label = voiceOptionsFor(engine).firstOrNull { it.id == voiceId }?.title ?: voiceId
+        val text = "Привет! Меня зовут $label. Так я буду говорить."
+        if (engine != com.app.assistant.tts.TtsEngine.PIPER) {
+            if (engine == com.app.assistant.tts.TtsEngine.EDGE) {
+                val edge = previewEdge ?: com.app.assistant.tts.EdgeTtsApiManager(
+                    settingsRepository.context, settingsRepository,
+                    com.app.assistant.viewmodel.MainViewModelFactory.okHttpClient,
+                ) {}.also { previewEdge = it }
+                edge.speak(text, com.app.assistant.tts.TtsManager.QUEUE_FLUSH, voiceId)
+            } else if (engine == com.app.assistant.tts.TtsEngine.GOOGLE) {
+                val google = com.app.assistant.tts.GoogleTtsApiManager(
+                    settingsRepository.context, settingsRepository,
+                    com.app.assistant.viewmodel.MainViewModelFactory.okHttpClient,
+                ) {}
+                google.speak(text, com.app.assistant.tts.TtsManager.QUEUE_FLUSH, voiceId)
+            } else {
+                com.app.assistant.tts.NativeTtsManager(settingsRepository.context, settingsRepository) {}
+                    .speak(text, com.app.assistant.tts.TtsManager.QUEUE_FLUSH, voiceId)
+            }
+            return
+        }
         if (ttsModelManager.isModelDownloaded(voiceId)) {
             // Тот же движок, что и на основном экране (OfflineTtsHolder): превью не
             // должно создавать второй native-контекст на ту же модель.
@@ -340,6 +394,8 @@ class SettingsViewModel(
         super.onCleared()
         com.app.assistant.tts.OfflineTtsHolder.shutdown()
         previewEdge?.shutdown()
+        runCatching { nativeTtsProbe?.shutdown() }
+        nativeTtsProbe = null
     }
 
     /** Журнал пути «текст → звук» для диагностики озвучки. */
@@ -347,15 +403,38 @@ class SettingsViewModel(
 
     fun clearTtsTrace() = com.app.assistant.util.TtsTrace.clear()
 
-    fun setDefaultVoice(voiceId: String) {
-        settingsRepository.setDefaultVoiceId(voiceId)
-        _defaultVoiceId.value = voiceId
+    /** Движок, голоса которого сейчас показываем в настройках. */
+    fun currentEngine(): com.app.assistant.tts.TtsEngine = when (_ttsMode.value) {
+        com.app.assistant.tts.TtsMode.OFFLINE -> com.app.assistant.tts.TtsEngine.PIPER
+        com.app.assistant.tts.TtsMode.API ->
+            if (com.app.assistant.config.SpeechConfig.ACTIVE_TTS_PROVIDER ==
+                com.app.assistant.config.TtsApiProvider.GOOGLE_TTS
+            ) {
+                com.app.assistant.tts.TtsEngine.GOOGLE
+            } else {
+                com.app.assistant.tts.TtsEngine.EDGE
+            }
+        else -> com.app.assistant.tts.TtsEngine.NATIVE
     }
 
-    fun setAgentVoice(agentName: String, voiceId: String) {
-        settingsRepository.setAgentVoice(agentName, voiceId)
+    fun voiceOptionsFor(engine: com.app.assistant.tts.TtsEngine): List<com.app.assistant.tts.VoiceOption> =
+        when (engine) {
+            com.app.assistant.tts.TtsEngine.PIPER -> com.app.assistant.tts.piperVoiceOptions()
+            com.app.assistant.tts.TtsEngine.EDGE,
+            com.app.assistant.tts.TtsEngine.GOOGLE,
+            -> com.app.assistant.tts.OnlineVoices.forEngine(engine)
+            com.app.assistant.tts.TtsEngine.NATIVE -> _nativeVoices.value
+        }
+
+    fun setDefaultVoice(engine: com.app.assistant.tts.TtsEngine, voiceId: String) {
+        settingsRepository.setDefaultVoice(engine, voiceId)
+        _defaultVoices.value = _defaultVoices.value + (engine.name to voiceId)
+    }
+
+    fun setAgentVoice(engine: com.app.assistant.tts.TtsEngine, agentName: String, voiceId: String) {
+        settingsRepository.setAgentVoice(engine, agentName, voiceId)
         _agentVoiceNames.value = settingsRepository.getKnownAgentNames()
-        _agentVoices.value = settingsRepository.getAgentVoices()
+        _agentVoices.value = _agentVoices.value + (engine.name to settingsRepository.getAgentVoices(engine))
     }
 
     fun saveSettings(
@@ -456,6 +535,7 @@ class SettingsViewModel(
 
     fun updateTtsMode(mode: com.app.assistant.tts.TtsMode) {
         settingsRepository.setTtsMode(mode)
+        _ttsMode.value = mode
     }
 
     fun autoDetectAndApplyConfig(

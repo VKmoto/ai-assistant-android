@@ -15,7 +15,7 @@ class TtsEngineSelector(
     private var apiTtsManager: ApiTtsManager? = null
 
     private fun getNativeTtsManager(): NativeTtsManager {
-        return nativeTtsManager ?: NativeTtsManager(context, onSpeakingStateChanged).also { nativeTtsManager = it }
+        return nativeTtsManager ?: NativeTtsManager(context, settingsRepository, onSpeakingStateChanged).also { nativeTtsManager = it }
     }
 
     private fun getOfflineTtsManager(): OfflineTtsManager {
@@ -48,7 +48,7 @@ class TtsEngineSelector(
                 // синхронно и падаем на облачный/системный голос — лучше чужой голос,
                 // чем молчание.
                 val offline = getOfflineTtsManager()
-                val voiceId = voiceIdOverride ?: settingsRepository.voiceIdForText(text)
+                val voiceId = voiceIdOverride ?: settingsRepository.voiceIdForText(text, TtsEngine.PIPER)
                 val ready = isOfflineModelInstalled() &&
                     (offline.ensureVoiceReady(voiceId) || offline.ensureAnyReady())
                 com.app.assistant.util.TtsTrace.add("selector", "mode=OFFLINE voice=$voiceId ready=$ready len=${text.length}")

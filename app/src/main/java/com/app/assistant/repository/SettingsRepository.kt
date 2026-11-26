@@ -231,74 +231,90 @@ class SettingsRepository(
     // агенты. Маппинг хранится в обычных prefs (не секрет), имена агентов накапливаются
     // сами — так настройки показывают тех, кто реально ответил, без ручного списка.
 
-    fun getDefaultVoiceId(): String =
-        sharedPreferences.getString("tts_default_voice", com.app.assistant.tts.VoiceCatalog.DEFAULT_ID)
-            ?: com.app.assistant.tts.VoiceCatalog.DEFAULT_ID
-
-    fun setDefaultVoiceId(voiceId: String) {
-        sharedPreferences.edit().putString("tts_default_voice", voiceId).apply()
+    /**
+     * Голоса привязаны к КОНКРЕТНОМУ движку: у Piper свои id моделей, у Edge и Google —
+     * id голосов сервиса, у системного синтеза — имя Voice. Один общий список смешал бы
+     * их, поэтому ключ хранения включает движок, а выбор в настройках зависит от режима.
+     */
+    fun getDefaultVoice(engine: com.app.assistant.tts.TtsEngine): String {
+        val key = "tts_default_${engine.name.lowercase()}"
+        return sharedPreferences.getString(key, defaultVoiceFor(engine)) ?: defaultVoiceFor(engine)
     }
 
-    /** Голос конкретного агента; null = «как по умолчанию» (и дефолт из каталога). */
-    fun getAgentVoice(agentName: String): String? =
-        sharedPreferences.getString("tts_agent_voice_${agentName.lowercase()}", null)
+    fun setDefaultVoice(engine: com.app.assistant.tts.TtsEngine, voiceId: String) {
+        sharedPreferences.edit().putString("tts_default_${engine.name.lowercase()}", voiceId).apply()
+    }
 
-    fun setAgentVoice(agentName: String, voiceId: String) {
+    private fun defaultVoiceFor(engine: com.app.assistant.tts.TtsEngine): String = when (engine) {
+        com.app.assistant.tts.TtsEngine.PIPER -> com.app.assistant.tts.VoiceCatalog.DEFAULT_ID
+        com.app.assistant.tts.TtsEngine.EDGE -> "ru-RU-SvetlanaNeural"
+        com.app.assistant.tts.TtsEngine.GOOGLE -> "ru-RU-Wavenet-A"
+        com.app.assistant.tts.TtsEngine.NATIVE -> ""
+    }
+
+    fun getAgentVoice(engine: com.app.assistant.tts.TtsEngine, agentName: String): String? =
+        sharedPreferences.getString(
+            "tts_agent_${engine.name.lowercase()}_${agentName.lowercase()}",
+            null,
+        )
+
+    fun setAgentVoice(engine: com.app.assistant.tts.TtsEngine, agentName: String, voiceId: String) {
         sharedPreferences.edit()
-            .putString("tts_agent_voice_${agentName.lowercase()}", voiceId)
-            .putStringSet("tts_agent_names", getKnownAgentNames().toSet() + agentName)
+            .putString("tts_agent_${engine.name.lowercase()}_${agentName.lowercase()}", voiceId)
             .apply()
+        rememberAgentName(agentName)
     }
 
     fun getKnownAgentNames(): List<String> {
         val raw = sharedPreferences.getStringSet("tts_agent_names", emptySet()) ?: emptySet()
-        // Дефолтная тройка видна сразу, не дожидаясь первого ответа: иначе настройки
-        // выглядели бы пустыми, пока агент ещё ни разу не заговорил.
         val defaults = listOf("Старпом", "Масяня", "Док")
         return (raw + defaults).distinct().sorted()
     }
 
-    /** Запомнить имя агента, встреченное в ответе, чтобы оно появилось в настройках. */
     fun rememberAgentName(agentName: String) {
         val name = agentName.trim()
         if (name.isEmpty()) return
         val current = sharedPreferences.getStringSet("tts_agent_names", emptySet()) ?: emptySet()
         if (current.contains(name)) return
-        sharedPreferences.edit()
-            .putStringSet("tts_agent_names", current + name)
-            .apply()
+        sharedPreferences.edit().putStringSet("tts_agent_names", current + name).apply()
     }
 
-    /** Явно выбранный агент для новых сообщений; "" = авто (по имени в тексте). */
-    fun getSelectedAgent(): String = sharedPreferences.getString("selected_agent", "") ?: ""
+    fun getAgentVoices(engine: com.app.assistant.tts.TtsEngine): Map<String, String> =
+        getKnownAgentNames().mapNotNull { name -> getAgentVoice(engine, name)?.let { name to it } }.toMap()
 
-    fun setSelectedAgent(agentName: String) {
-        sharedPreferences.edit().putString("selected_agent", agentName).apply()
+    /** Голос, которым говорить этот текст, для конкретного движка. */
+    fun voiceIdForText(text: String, engine: com.app.assistant.tts.TtsEngine): String {
+        val name = VoiceResolver.agentName(text) ?: return getDefaultVoice(engine)
+        rememberAgentName(name)
+        getAgentVoice(engine, name)?.let { return it }
+        return defaultAgentVoice(engine, name) ?: getDefaultVoice(engine)
     }
-
-    /** Все привязки «агент -> голос» для настроек. */
-    fun getAgentVoices(): Map<String, String> =
-        getKnownAgentNames().mapNotNull { name -> getAgentVoice(name)?.let { name to it } }.toMap()
 
     /**
-     * Голос, которым говорить этот текст.
-     *
-     * Префикс «[Имя]» ставит роутер (bb-messenger) для каждого ответа; если его нет
-     * (служебные сообщения, старые записи), берём голос по умолчанию.
+     * Дефолты владельца (2026-11-26): Старпом и Масяня — женский голос, Док — мужской.
+     * Для системного синтеза пол неизвестен, поэтому там просто голос по умолчанию.
      */
-    fun voiceIdForText(text: String): String {
-        val name = VoiceResolver.agentName(text)
-        if (name == null) return getDefaultVoiceId()
-        rememberAgentName(name)
-        getAgentVoice(name)?.let { return it }
-        // Дефолты владельца (2026-11-26): Старпом и Масяня — женский голос Ирины,
-        // Док — мужской Денис. Незнакомый агент получает голос по умолчанию.
-        return when (name.lowercase()) {
+    private fun defaultAgentVoice(
+        engine: com.app.assistant.tts.TtsEngine,
+        name: String,
+    ): String? = when (engine) {
+        com.app.assistant.tts.TtsEngine.PIPER -> when (name.lowercase()) {
             "старпом" -> "irina"
             "масяня" -> "irina"
             "док" -> "denis"
-            else -> getDefaultVoiceId()
+            else -> null
         }
+        com.app.assistant.tts.TtsEngine.EDGE -> if (name.lowercase() == "док") {
+            "ru-RU-DmitryNeural"
+        } else {
+            "ru-RU-SvetlanaNeural"
+        }
+        com.app.assistant.tts.TtsEngine.GOOGLE -> if (name.lowercase() == "док") {
+            "ru-RU-Wavenet-B"
+        } else {
+            "ru-RU-Wavenet-A"
+        }
+        com.app.assistant.tts.TtsEngine.NATIVE -> null
     }
 }
 

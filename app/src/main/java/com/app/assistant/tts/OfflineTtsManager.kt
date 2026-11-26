@@ -156,7 +156,7 @@ class OfflineTtsManager(
                 // Голос выбирается по префиксу «[Имя]», который ставит роутер: один чат —
                 // разные агенты — разные голоса. Нет модели этого голоса — пробуем голос
                 // по умолчанию, затем любой установленный, чтобы речь не пропала совсем.
-                val voiceId = item.voiceIdOverride ?: settingsRepository.voiceIdForText(text)
+                val voiceId = item.voiceIdOverride ?: settingsRepository.voiceIdForText(text, TtsEngine.PIPER)
                 val tts = initTtsEngine(voiceId)
                     ?: modelManager.installedVoices().firstOrNull()?.let { initTtsEngine(it) }
                 if (tts == null) {
