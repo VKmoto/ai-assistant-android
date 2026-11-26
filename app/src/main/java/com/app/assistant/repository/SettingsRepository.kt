@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKeys
 import com.app.assistant.llm.LlmProvider
+import com.app.assistant.tts.VoiceResolver
 
 class SettingsRepository(
     val context: Context,
