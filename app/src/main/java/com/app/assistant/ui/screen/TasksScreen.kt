@@ -161,8 +161,8 @@ fun TasksScreen(
             // FlowRow, а не Row: четыре чипа не помещаются в ширину экрана, и «Канбан»
             // уезжал за край (на скриншоте от него осталась полоска).
             FlowRow(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 FilterChip(selected = !kanban && view == "inbox", onClick = { kanban = false; view = "inbox" }, label = { Text("Входящие") })
                 FilterChip(selected = !kanban && view == "today", onClick = { kanban = false; view = "today" }, label = { Text("Сегодня") })
@@ -180,7 +180,7 @@ fun TasksScreen(
                 KanbanBoard(tasks = tasks, onTaskClick = { selected = it })
             } else {
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     items(tasks, key = { it.id }) { task ->
@@ -345,7 +345,7 @@ private fun KanbanBoard(tasks: List<TaskItem>, onTaskClick: (TaskItem) -> Unit) 
     // («Тест email-н апом...»). Колонки фиксированной ширины, канбан прокручивается
     // по горизонтали — как в обычных канбан-досках.
     Row(
-        modifier = Modifier.fillMaxSize().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp),
+        modifier = Modifier.fillMaxSize().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         STATUS_COLUMNS.forEach { (status, label) ->

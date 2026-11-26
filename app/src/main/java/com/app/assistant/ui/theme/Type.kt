@@ -6,7 +6,18 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
-// Set of Material typography styles to start with
+/**
+ * Типографика — токены Material 3.
+ *
+ * Раньше здесь переопределялся только `bodyLarge` (letterSpacing 0.5sp), остальные роли
+ * брались из библиотеки: получался «свой» стиль на одном размере и стандартный на
+ * остальных. Скилл android-design прямо просит не переписывать веса и трекинг вручную,
+ * а брать токены — так делает иерархия предсказуемой при масштабировании шрифта
+ * (Android 14+: до 200%).
+ *
+ * bodyLarge задан явно только чтобы зафиксировать line-height 24sp (требование
+ * читаемости), всё остальное — библиотечные значения.
+ */
 val Typography =
     Typography(
         bodyLarge =
@@ -15,22 +26,6 @@ val Typography =
                 fontWeight = FontWeight.Normal,
                 fontSize = 16.sp,
                 lineHeight = 24.sp,
-                letterSpacing = 0.5.sp,
+                letterSpacing = 0.sp,
             ),
-    /* Other default text styles to override
-    titleLarge = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Normal,
-        fontSize = 22.sp,
-        lineHeight = 28.sp,
-        letterSpacing = 0.sp
-    ),
-    labelSmall = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Medium,
-        fontSize = 11.sp,
-        lineHeight = 16.sp,
-        letterSpacing = 0.5.sp
-    )
-     */
     )
