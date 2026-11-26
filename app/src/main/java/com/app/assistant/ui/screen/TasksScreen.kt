@@ -1,5 +1,6 @@
 package com.app.assistant.ui.screen
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,8 +10,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -33,7 +32,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -63,11 +61,16 @@ import java.util.TimeZone
 
 /**
  * Экран «Задачи» — часть приложения, поэтому оформлен теми же средствами: Material3,
- * AssistantTheme, скругления 16 dp и цвета темы, без сторонних UI-библиотек.
+ * AssistantTheme, скругления 16 dp и цвета темы.
  *
- * v1: список (Входящие/Сегодня/Предстоящее) и канбан с колонками
- * Надо / В работе / Ждёт / Готово. Перемещение — через карточку задачи (drag-and-drop
- * добавим отдельным шагом, чтобы не тащить в первый релиз жестовую логику).
+ * Структура намеренно простая: Column + TopAppBar, никаких subcompose-контейнеров
+ * (Scaffold) и ранних `return` из composable-лямбд. Первый вариант с Scaffold падал
+ * с ArrayIndexOutOfBoundsException в Composer (стек с устройства 2026-11-26) —
+ * повреждение группы при измерении subcompose-слота. Здесь каждая ветка — обычный
+ * if/else без выхода из composition, а диалоги вынесены за пределы Column.
+ *
+ * v1: список (Входящие/Сегодня/Предстоящее) и канбан: Надо / В работе / Ждёт / Готово.
+ * Перемещение — через карточку (drag-and-drop отдельным шагом).
  */
 private val STATUS_COLUMNS = listOf(
     "todo" to "Надо",
@@ -87,9 +90,8 @@ fun TasksScreen(
 
     var baseUrl by remember { mutableStateOf(settingsRepository.getTasksUrl()) }
     var token by remember { mutableStateOf(settingsRepository.getTasksToken()) }
-    var showSettings by remember { mutableStateOf(baseUrl.isBlank() || token.isBlank()) }
+    var showSettings by remember { mutableStateOf(false) }
     var showAdd by remember { mutableStateOf(false) }
-
     var view by remember { mutableStateOf("today") }
     var kanban by remember { mutableStateOf(false) }
     var tasks by remember { mutableStateOf<List<TaskItem>>(emptyList()) }
@@ -97,60 +99,60 @@ fun TasksScreen(
     var error by remember { mutableStateOf<String?>(null) }
     var refreshKey by remember { mutableIntStateOf(0) }
     var selected by remember { mutableStateOf<TaskItem?>(null) }
+    var settingsUrl by remember { mutableStateOf("") }
+    var settingsToken by remember { mutableStateOf("") }
+    var newTitle by remember { mutableStateOf("") }
+    var newDue by remember { mutableStateOf("") }
 
-    val config = TasksConfig(baseUrl, token)
     val ready = baseUrl.isNotBlank() && token.isNotBlank()
+    val config = TasksConfig(baseUrl, token)
 
     LaunchedEffect(view, kanban, refreshKey, ready) {
-        if (!ready) return@LaunchedEffect
-        loading = true
-        error = null
-        runCatching { TasksApi.list(client, config, if (kanban) "kanban" else view) }
-            .onSuccess { tasks = it }
-            .onFailure { error = it.message ?: "не удалось загрузить" }
-        loading = false
+        if (ready) {
+            loading = true
+            error = null
+            runCatching { TasksApi.list(client, config, if (kanban) "kanban" else view) }
+                .onSuccess { tasks = it }
+                .onFailure { error = it.message ?: "не удалось загрузить" }
+            loading = false
+        } else {
+            showSettings = true
+        }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Задачи") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Назад")
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { refreshKey++ }) {
-                        Icon(Icons.Filled.Refresh, contentDescription = "Обновить")
-                    }
-                    IconButton(onClick = { showSettings = true }) {
-                        Icon(Icons.Filled.Settings, contentDescription = "Настройки задач")
-                    }
-                },
-            )
-        },
-        floatingActionButton = {
-            if (ready) {
-                FloatingActionButton(onClick = { showAdd = true }) {
-                    Icon(Icons.Filled.Add, contentDescription = "Новая задача")
+    Column(modifier = Modifier.fillMaxSize()) {
+        TopAppBar(
+            title = { Text("Задачи") },
+            navigationIcon = {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.Filled.ArrowBack, contentDescription = "Назад")
                 }
-            }
-        },
-    ) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 12.dp)) {
-            if (!ready) {
-                Text(
-                    "Укажите адрес сервиса задач и токен устройства (кнопка настроек сверху).",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                return@Column
-            }
+            },
+            actions = {
+                IconButton(onClick = { refreshKey++ }) {
+                    Icon(Icons.Filled.Refresh, contentDescription = "Обновить")
+                }
+                IconButton(onClick = {
+                    settingsUrl = baseUrl
+                    settingsToken = token
+                    showSettings = true
+                }) {
+                    Icon(Icons.Filled.Settings, contentDescription = "Настройки задач")
+                }
+            },
+        )
 
+        if (!ready) {
+            Text(
+                "Укажите адрес сервиса задач и токен устройства (кнопка настроек сверху).",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(16.dp),
+            )
+        } else {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 FilterChip(selected = !kanban && view == "inbox", onClick = { kanban = false; view = "inbox" }, label = { Text("Входящие") })
@@ -159,39 +161,57 @@ fun TasksScreen(
                 FilterChip(selected = kanban, onClick = { kanban = true }, label = { Text("Канбан") })
             }
 
-            when {
-                loading -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                error != null -> Text(error!!, color = MaterialTheme.colorScheme.error)
-                tasks.isEmpty() -> Text("Пусто", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                kanban -> KanbanBoard(tasks, onTaskClick = { selected = it })
-                else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (loading) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            } else if (error != null) {
+                Text(error!!, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp))
+            } else if (tasks.isEmpty()) {
+                Text("Пусто", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp))
+            } else if (kanban) {
+                KanbanBoard(tasks = tasks, onTaskClick = { selected = it })
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                     items(tasks, key = { it.id }) { task ->
-                        TaskCard(task, onClick = { selected = task })
+                        TaskCard(task = task, onClick = { selected = task })
                     }
                 }
             }
         }
     }
 
+    // Кнопка «+» обычная, а не FAB из Scaffold: тот же вид, но без subcompose-слота.
+    if (ready) {
+        Box(modifier = Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.BottomEnd) {
+            FloatingActionButton(onClick = {
+                newTitle = ""
+                newDue = ""
+                showAdd = true
+            }) {
+                Icon(Icons.Filled.Add, contentDescription = "Новая задача")
+            }
+        }
+    }
+
     if (showSettings) {
-        var urlField by remember { mutableStateOf(baseUrl) }
-        var tokenField by remember { mutableStateOf(token) }
         AlertDialog(
-            onDismissRequest = { if (ready) showSettings = false },
+            onDismissRequest = { showSettings = false },
             title = { Text("Сервис задач") },
             text = {
                 Column {
                     OutlinedTextField(
-                        value = urlField,
-                        onValueChange = { urlField = it },
-                        label = { Text("Адрес (https://tasks… )") },
+                        value = settingsUrl,
+                        onValueChange = { settingsUrl = it },
+                        label = { Text("Адрес (https://tasks…)") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
                     Spacer(Modifier.height(8.dp))
                     OutlinedTextField(
-                        value = tokenField,
-                        onValueChange = { tokenField = it },
+                        value = settingsToken,
+                        onValueChange = { settingsToken = it },
                         label = { Text("Токен устройства") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
@@ -200,36 +220,34 @@ fun TasksScreen(
             },
             confirmButton = {
                 TextButton(onClick = {
-                    baseUrl = urlField.trim()
-                    token = tokenField.trim()
+                    baseUrl = settingsUrl.trim()
+                    token = settingsToken.trim()
                     settingsRepository.setTasksUrl(baseUrl)
                     settingsRepository.setTasksToken(token)
                     showSettings = false
                     refreshKey++
                 }) { Text("Сохранить") }
             },
-            dismissButton = { if (ready) TextButton(onClick = { showSettings = false }) { Text("Отмена") } },
+            dismissButton = { TextButton(onClick = { showSettings = false }) { Text("Отмена") } },
         )
     }
 
     if (showAdd) {
-        var titleField by remember { mutableStateOf("") }
-        var dueField by remember { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { showAdd = false },
             title = { Text("Новая задача") },
             text = {
                 Column {
                     OutlinedTextField(
-                        value = titleField,
-                        onValueChange = { titleField = it },
+                        value = newTitle,
+                        onValueChange = { newTitle = it },
                         label = { Text("Что сделать") },
                         modifier = Modifier.fillMaxWidth(),
                     )
                     Spacer(Modifier.height(8.dp))
                     OutlinedTextField(
-                        value = dueField,
-                        onValueChange = { dueField = it },
+                        value = newDue,
+                        onValueChange = { newDue = it },
                         label = { Text("Срок (2026-11-27 09:00, МСК)") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
@@ -238,13 +256,13 @@ fun TasksScreen(
             },
             confirmButton = {
                 TextButton(onClick = {
-                    val title = titleField.trim()
-                    if (title.isEmpty()) return@TextButton
-                    scope.launch {
-                        runCatching {
-                            TasksApi.create(client, config, title, dueField.trim().ifEmpty { null })
-                        }.onSuccess { showAdd = false; refreshKey++ }
-                            .onFailure { error = it.message }
+                    val title = newTitle.trim()
+                    if (title.isNotEmpty()) {
+                        scope.launch {
+                            runCatching { TasksApi.create(client, config, title, newDue.trim().ifEmpty { null }) }
+                                .onSuccess { showAdd = false; refreshKey++ }
+                                .onFailure { error = it.message }
+                        }
                     }
                 }) { Text("Создать") }
             },
@@ -252,36 +270,40 @@ fun TasksScreen(
         )
     }
 
-    selected?.let { task ->
+    if (selected != null) {
         TaskDetailsDialog(
-            task = task,
+            task = selected!!,
             onDismiss = { selected = null },
             onMove = { status ->
-                scope.launch {
-                    runCatching { TasksApi.move(client, config, task.id, status) }
-                        .onSuccess { selected = null; refreshKey++ }
-                        .onFailure { error = it.message }
+                val task = selected
+                if (task != null) {
+                    scope.launch {
+                        runCatching { TasksApi.move(client, config, task.id, status) }
+                            .onSuccess { selected = null; refreshKey++ }
+                            .onFailure { error = it.message }
+                    }
                 }
             },
             onComplete = {
-                scope.launch {
-                    runCatching { TasksApi.complete(client, config, task.id) }
-                        .onSuccess { selected = null; refreshKey++ }
-                        .onFailure { error = it.message }
+                val task = selected
+                if (task != null) {
+                    scope.launch {
+                        runCatching { TasksApi.complete(client, config, task.id) }
+                            .onSuccess { selected = null; refreshKey++ }
+                            .onFailure { error = it.message }
+                    }
                 }
             },
         )
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TaskCard(task: TaskItem, onClick: () -> Unit) {
     Card(
-        onClick = onClick,
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().clickable { onClick() },
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Text(
@@ -306,17 +328,24 @@ private fun TaskCard(task: TaskItem, onClick: () -> Unit) {
 
 @Composable
 private fun KanbanBoard(tasks: List<TaskItem>, onTaskClick: (TaskItem) -> Unit) {
-    Row(modifier = Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    Row(modifier = Modifier.fillMaxSize().padding(horizontal = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         STATUS_COLUMNS.forEach { (status, label) ->
             val columnTasks = tasks.filter { it.status == status }
-            Column(modifier = Modifier.weight(1f).fillMaxSize().verticalScroll(rememberScrollState())) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState()),
+            ) {
                 Text(
                     "$label (${columnTasks.size})",
                     style = MaterialTheme.typography.labelLarge,
                     modifier = Modifier.padding(vertical = 6.dp),
                 )
                 columnTasks.forEach { task ->
-                    Box(modifier = Modifier.padding(bottom = 6.dp)) { TaskCard(task) { onTaskClick(task) } }
+                    Box(modifier = Modifier.padding(bottom = 6.dp)) {
+                        TaskCard(task = task, onClick = { onTaskClick(task) })
+                    }
                 }
             }
         }
