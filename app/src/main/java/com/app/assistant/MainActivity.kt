@@ -379,7 +379,10 @@ class MainActivity : ComponentActivity() {
         // ответ приходил только текстом (жалоба владельца 2026-11-26).
         if (viewModel.chatList.any { it.isStreaming || it.isLoading }) return
         lifecycleScope.launch {
-            delay(400)
+            // 900 мс вместо 400: хвост собственной фразы и эхо из динамика ещё звучат
+            // в комнате, и микрофон успевал распознать их как новую команду — Масяня
+            // отвечала на свою же реплику (жалоба владельца 2026-11-26).
+            delay(900)
             if (
                 viewModel.isHandsFreeModeActive.value &&
                 !viewModel.isListening.value &&
@@ -390,6 +393,23 @@ class MainActivity : ComponentActivity() {
                 startSpeechRecognition(isHandsFree = true)
             }
         }
+    }
+
+    /**
+     * Похоже ли распознанное на последний ответ ассистента (эхо динамика).
+     *
+     * Сравнение нормализованное и только по вхождению: «Поняла, Капитан» из динамика
+     * должно отбрасываться, а настоящая короткая команда («Док») — проходить.
+     */
+    private fun isEchoOfLastAnswer(recognized: String): Boolean {
+        val spoken = recognized.trim().lowercase().replace(Regex("[^а-яa-z0-9 ]"), " ")
+            .replace(Regex("\\s+"), " ").trim()
+        if (spoken.length < 6) return false
+        val answer = viewModel.chatList.lastOrNull { !it.isMe }?.text ?: return false
+        val normalized = answer.lowercase().replace(Regex("[^а-яa-z0-9 ]"), " ")
+            .replace(Regex("\\s+"), " ").trim()
+        if (normalized.isEmpty()) return false
+        return normalized.contains(spoken) || (spoken.length > 12 && spoken.contains(normalized.take(40)))
     }
 
     private fun startSpeechRecognition(isHandsFree: Boolean = false) {
@@ -473,6 +493,17 @@ class MainActivity : ComponentActivity() {
                 }
 
                 override fun onResults(recognizedText: String) {
+                    // Эхо собственного ответа не должно становиться новым вопросом.
+                    if (viewModel.isHandsFreeModeActive.value && isEchoOfLastAnswer(recognizedText)) {
+                        com.app.assistant.util.TtsTrace.add(
+                            "activity",
+                            "ignored echo: ${recognizedText.take(40)}",
+                        )
+                        viewModel.setListening(false)
+                        viewModel.setVoiceProcessing(false)
+                        resumeHandsFreeListening()
+                        return
+                    }
                     viewModel.setListening(false)
                     viewModel.setVoiceProcessing(false)
                     viewModel.setAudioAmplitude(0f)
