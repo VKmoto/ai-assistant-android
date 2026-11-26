@@ -359,6 +359,24 @@ In the settings page, you can change the default URL to any OpenAI-compatible se
 
 ---
 
+## Building a signed APK (CI)
+
+The workflow builds a **signed release APK** and uploads it as the `app-release`
+artifact. Signing uses a permanent keystore supplied through repository secrets, so
+later builds install over the previous version instead of requiring an uninstall:
+
+| Secret | Meaning |
+|---|---|
+| `KEYSTORE_BASE64` | base64 of the `.jks` file |
+| `KEYSTORE_PASSWORD` | store password |
+| `KEYSTORE_KEY_ALIAS` | key alias |
+| `KEYSTORE_KEY_PASSWORD` | key password |
+
+`app/build.gradle.kts` reads the same values from `KEYSTORE_FILE_PATH`,
+`KEYSTORE_PASSWORD`, `KEYSTORE_KEY_ALIAS` and `KEYSTORE_KEY_PASSWORD`, so a local
+build can be signed the same way. When the secrets are absent the build still
+succeeds, but the APK is unsigned.
+
 ## Permissions
 
 | Permission | Required For |
