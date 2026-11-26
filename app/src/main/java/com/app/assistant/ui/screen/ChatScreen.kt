@@ -163,8 +163,8 @@ fun SetupUI(
                 tempCameraUri = uri
                 cameraLauncher.launch(uri)
             } catch (e: Exception) {
-                android.util.Log.e("ChatScreen", "Failed to launch camera", e)
-                Toast.makeText(context, "Failed to launch camera", Toast.LENGTH_SHORT).show()
+                android.util.Log.e("ChatScreen", "Не удалось запустить камеру", e)
+                Toast.makeText(context, "Не удалось запустить камеру", Toast.LENGTH_SHORT).show()
             }
         }
 
@@ -174,7 +174,7 @@ fun SetupUI(
             if (isGranted) {
                 launchCamera()
             } else {
-                Toast.makeText(context, "Camera permission is required to take photos", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "Для фото нужно разрешение на камеру", Toast.LENGTH_SHORT).show()
             }
         }
 
@@ -530,11 +530,11 @@ fun ChatScreenContentPreview() {
             ),
             chatList = listOf(
                 Conversation(
-                    text = "Hi! How can I configure my API keys?",
+                    text = "Привет! Как настроить API-ключи?",
                     isMe = true
                 ),
                 Conversation(
-                    text = "You can configure them by opening settings in the side drawer menu.",
+                    text = "Их можно настроить в меню настроек.",
                     isMe = false
                 )
             ),

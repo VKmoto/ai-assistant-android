@@ -262,7 +262,7 @@ fun ScannerCameraPreview(
         ) {
             Icon(
                 imageVector = Icons.Default.Close,
-                contentDescription = "Close Scanner",
+                contentDescription = "Закрыть сканер",
                 tint = Color.White
             )
         }
@@ -285,7 +285,7 @@ fun ScannerCameraPreview(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = "Import API Keys Safely",
+                    text = "Безопасный импорт API-ключей",
                     color = Color.White,
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp,
@@ -293,7 +293,7 @@ fun ScannerCameraPreview(
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = "To import your API keys securely, visit this URL on your desktop/other device:",
+                    text = "Чтобы безопасно импортировать API-ключи, откройте этот адрес на компьютере или другом устройстве:",
                     color = Color.LightGray,
                     fontSize = 12.sp,
                     textAlign = TextAlign.Center
@@ -318,7 +318,7 @@ fun ScannerCameraPreview(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "Align the QR code on the screen within the frame to scan.",
+                    text = "Наведите камеру так, чтобы QR-код оказался в рамке.",
                     color = Color.Gray,
                     fontSize = 11.sp,
                     textAlign = TextAlign.Center
@@ -342,13 +342,13 @@ fun PermissionDeniedContent(
     ) {
         Icon(
             imageVector = Icons.Default.Warning,
-            contentDescription = "Warning",
+            contentDescription = "Предупреждение",
             tint = Color(0xFFFFB300),
             modifier = Modifier.size(64.dp)
         )
         Spacer(modifier = Modifier.height(16.dp))
         Text(
-            text = "Camera Permission Required",
+            text = "Нужно разрешение на камеру",
             color = Color.White,
             fontWeight = FontWeight.Bold,
             fontSize = 20.sp,
@@ -356,7 +356,7 @@ fun PermissionDeniedContent(
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "We need access to your camera to scan QR codes and safely import API keys.",
+            text = "Нужен доступ к камере, чтобы сканировать QR-коды и безопасно импортировать API-ключи.",
             color = Color.LightGray,
             fontSize = 14.sp,
             textAlign = TextAlign.Center
@@ -371,11 +371,11 @@ fun PermissionDeniedContent(
             shape = RoundedCornerShape(12.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text("Grant Permission", fontWeight = FontWeight.Bold)
+            Text("Разрешить доступ", fontWeight = FontWeight.Bold)
         }
         Spacer(modifier = Modifier.height(12.dp))
         TextButton(onClick = onClose) {
-            Text("Cancel", color = Color.White)
+            Text("Отмена", color = Color.White)
         }
     }
 }

@@ -1,213 +1,214 @@
 <resources>
-    <string name="app_name">Assistant</string>
-    <string name="settings_title">Settings</string>
-    <string name="youtube_api_key">YouTube API Key</string>
-    <string name="edge_tts_subscription_key">Edge TTS Subscription Key</string>
-    <string name="chat_api_key">Chat API Key</string>
-    <string name="llm_provider">LLM Provider</string>
-    <string name="llm_model">Model Name</string>
-    <string name="llm_custom_config">Custom Config (Markdown)</string>
-    <string name="app_version">App Version: %1$s</string>
-    <string name="save">Save</string>
-    <string name="cancel">Cancel</string>
-    <string name="chats">Chats</string>
-    <string name="start_new_chat">Start new chat</string>
-    <string name="menu">Menu</string>
-    <string name="copy">Copy</string>
-    <string name="delete">Delete</string>
-    <string name="translate">Translate</string>
-    <string name="restart_chat">Restart Chat</string>
-    <string name="chat_different_languages">Chat in different languages</string>
-    <string name="search_placeholder">Search…</string>
-    <string name="clear_chat_history_confirm">Are you sure you want to clear this chat from history?</string>
-    <string name="yes">Yes</string>
-    <string name="no">No</string>
-    <string name="delete_message_confirm">Delete this message?</string>
+    <string name="app_name">Ассистент</string>
+    <string name="settings_title">Настройки</string>
+    <string name="youtube_api_key">API-ключ YouTube</string>
+    <string name="edge_tts_subscription_key">Ключ подписки Edge TTS</string>
+    <string name="chat_api_key">API-ключ чата</string>
+    <string name="llm_provider">Провайдер LLM</string>
+    <string name="llm_model">Название модели</string>
+    <string name="llm_custom_config">Своя конфигурация (Markdown)</string>
+    <string name="app_version">Версия приложения: %1$s</string>
+    <string name="save">Сохранить</string>
+    <string name="cancel">Отмена</string>
+    <string name="chats">Чаты</string>
+    <string name="start_new_chat">Новый чат</string>
+    <string name="menu">Меню</string>
+    <string name="copy">Копировать</string>
+    <string name="delete">Удалить</string>
+    <string name="translate">Перевести</string>
+    <string name="restart_chat">Начать чат заново</string>
+    <string name="chat_different_languages">Общение на разных языках</string>
+    <string name="search_placeholder">Поиск…</string>
+    <string name="clear_chat_history_confirm">Удалить этот чат из истории?</string>
+    <string name="yes">Да</string>
+    <string name="no">Нет</string>
+    <string name="delete_message_confirm">Удалить это сообщение?</string>
 
     <!-- UI Descriptions & Placeholders -->
-    <string name="navigation_desc">Navigation</string>
-    <string name="call_desc">Call</string>
-    <string name="type_here_placeholder">Type here...</string>
-    <string name="stop_desc">Stop</string>
-    <string name="mic_desc">Mic</string>
-    <string name="send_desc">Send</string>
+    <string name="navigation_desc">Навигация</string>
+    <string name="call_desc">Позвонить</string>
+    <string name="type_here_placeholder">Введите сообщение…</string>
+    <string name="stop_desc">Стоп</string>
+    <string name="mic_desc">Микрофон</string>
+    <string name="voice_mode_desc">Режим разговора: вкл/выкл</string>
+    <string name="send_desc">Отправить</string>
 
     <!-- Toast Messages -->
-    <string name="downloading_model_toast">Downloading translation model.</string>
-    <string name="download_completed_toast">Download completed, its recommended to use selected language keyboard.</string>
-    <string name="download_failed_toast">Something went wrong, model download failed.</string>
+    <string name="downloading_model_toast">Скачиваю модель перевода.</string>
+    <string name="download_completed_toast">Загрузка завершена. Рекомендуется использовать клавиатуру выбранного языка.</string>
+    <string name="download_failed_toast">Что-то пошло не так: не удалось скачать модель.</string>
 
     <!-- UseCase Specific Strings -->
-    <string name="playing_song">Playing %1$s</string>
-    <string name="youtube_key_missing">Your Youtube API key is missing or invalid.</string>
-    <string name="navigating_to">Navigating to %1$s.</string>
-    <string name="new_alarm_message">New Alarm</string>
-    <string name="reminder_default_context">Reminder</string>
-    <string name="song_not_found_fallback">I can not find such song, please try again.</string>
-    <string name="location_not_found_fallback">I can not find such location, please try again.</string>
-    <string name="generic_error_fallback">Something went wrong, please try again.</string>
+    <string name="playing_song">Включаю %1$s</string>
+    <string name="youtube_key_missing">Ваш API-ключ YouTube отсутствует или неверен.</string>
+    <string name="navigating_to">Прокладываю маршрут до %1$s.</string>
+    <string name="new_alarm_message">Новый будильник</string>
+    <string name="reminder_default_context">Напоминание</string>
+    <string name="song_not_found_fallback">Не могу найти такую песню, попробуйте ещё раз.</string>
+    <string name="location_not_found_fallback">Не могу найти такое место, попробуйте ещё раз.</string>
+    <string name="generic_error_fallback">Что-то пошло не так, попробуйте ещё раз.</string>
 
     <!-- Dynamic Response String Arrays -->
     <string-array name="permission_contacts_call">
-        <item>I need permission to access your contacts and make phone call. Please allow and try again.</item>
-        <item>Hey, I’ll need access to your contacts and calling first. Can you allow that?</item>
-        <item>Looks like I don’t have permission to call yet. Please enable it and retry.</item>
-        <item>I can help with that, but I need contacts and call access first.</item>
-        <item>Please grant me contacts and calling permission so I can make the call for you.</item>
-        <item>I can’t make calls without your permission. Could you turn it on?</item>
+        <item>Мне нужно разрешение на доступ к контактам и звонкам. Пожалуйста, разрешите и попробуйте снова.</item>
+        <item>Для звонка потребуется доступ к контактам. Разрешите его, пожалуйста.</item>
+        <item>Похоже, у меня пока нет разрешения на звонки. Включите его и повторите.</item>
+        <item>Я могу позвонить, но сначала нужен доступ к контактам и звонкам.</item>
+        <item>Разрешите доступ к контактам и звонкам, чтобы я могла набрать номер.</item>
+        <item>Без разрешения я не смогу позвонить. Включите его, пожалуйста.</item>
     </string-array>
 
     <string-array name="permission_location">
-        <item>I need permission to access your location. Please try again.</item>
-        <item>I can get the weather, but I’ll need your location first.</item>
-        <item>Looks like location access isn’t granted. Please allow it and try again.</item>
-        <item>Hey, could you enable location permission so I can show the weather?</item>
-        <item>To fetch the forecast, I’ll need your location. Can you grant access?</item>
-        <item>Without your location, I can’t check the weather. Please turn it on.</item>
+        <item>Мне нужно разрешение на доступ к геолокации. Попробуйте ещё раз.</item>
+        <item>Погоду покажу, но сначала нужен доступ к вашему местоположению.</item>
+        <item>Похоже, доступ к геолокации не выдан. Разрешите и повторите.</item>
+        <item>Включите, пожалуйста, доступ к геолокации, чтобы я показала погоду.</item>
+        <item>Чтобы узнать прогноз, нужен ваш город или геолокация. Разрешите доступ?</item>
+        <item>Без геолокации погоду не узнать. Включите её, пожалуйста.</item>
     </string-array>
 
     <string-array name="location_service_off">
-        <item>I need to know your location for that. Please turn on your location and try again.</item>
-        <item>looks like location is off. Could you enable it?</item>
-        <item>I can’t continue without your location. Please turn it on.</item>
-        <item>Hey, I’ll need your location for this. Can you switch it on?</item>
-        <item>Looks like your location services are disabled. Please activate them.</item>
-        <item>Please turn on location, then I’ll be able to continue.</item>
+        <item>Для этого нужно знать ваше местоположение. Включите геолокацию и повторите.</item>
+        <item>Похоже, геолокация выключена. Можно её включить?</item>
+        <item>Без геолокации я не смогу продолжить. Включите её, пожалуйста.</item>
+        <item>Для этого понадобится геолокация. Включите её, пожалуйста.</item>
+        <item>Службы определения местоположения отключены. Активируйте их.</item>
+        <item>Включите геолокацию, и я продолжу.</item>
     </string-array>
 
     <string-array name="call_failed">
-        <item>Sorry, failed to make call. Please try again.</item>
-        <item>Oops, the call didn’t go through. Want to retry?</item>
-        <item>I couldn’t complete the call. Please try again.</item>
-        <item>Looks like that call failed. Give it another shot?</item>
-        <item>Something went wrong with the call. Please try again later.</item>
-        <item>I wasn’t able to connect the call. Can we try once more?</item>
+        <item>Извините, не удалось позвонить. Попробуйте ещё раз.</item>
+        <item>Ой, звонок не прошёл. Повторим?</item>
+        <item>Не получилось завершить звонок. Попробуйте ещё раз.</item>
+        <item>Похоже, звонок сорвался. Попробуем снова?</item>
+        <item>Что-то пошло не так со звонком. Попробуйте позже.</item>
+        <item>Не удалось соединить. Попробуем ещё раз?</item>
     </string-array>
 
     <string-array name="contact_not_found">
-        <item>I cannot find such contact, please try again.</item>
-        <item>I didn’t find that contact in your list.</item>
-        <item>No contact matched that name, could you check and retry?</item>
-        <item>Sorry, I couldn’t locate that person in your contacts.</item>
-        <item>Looks like that name isn’t saved in your contacts.</item>
-        <item>I couldn’t find that contact. Maybe try with a different name?</item>
+        <item>Не могу найти такой контакт, попробуйте ещё раз.</item>
+        <item>Я не нашла этот контакт в вашем списке.</item>
+        <item>Ни один контакт не совпал с этим именем. Проверьте и повторите?</item>
+        <item>Извините, не нашла этого человека в контактах.</item>
+        <item>Похоже, это имя не сохранено в контактах.</item>
+        <item>Контакт не найден. Может, попробуете другое имя?</item>
     </string-array>
 
     <string-array name="song_not_found">
-        <item>I can not find such song, please try again.</item>
-        <item>Sorry, I couldn’t find that track.</item>
-        <item>no song matched your request. Want to try another?</item>
-        <item>I wasn’t able to locate that song. Please retry.</item>
-        <item>Looks like that song isn’t available right now.</item>
-        <item>I couldn’t find that one. Maybe try with a different title?</item>
+        <item>Не могу найти такую песню, попробуйте ещё раз.</item>
+        <item>Извините, не нашла этот трек.</item>
+        <item>Ни одна песня не подошла под запрос. Попробуете другую?</item>
+        <item>Не удалось найти эту песню. Повторите, пожалуйста.</item>
+        <item>Похоже, этой песни сейчас нет в доступе.</item>
+        <item>Не нашла. Может, попробуете другое название?</item>
     </string-array>
 
     <string-array name="location_not_found">
-        <item>I can not find such location, please try again.</item>
-        <item>Sorry, I couldn’t figure out where that is.</item>
-        <item>I wasn’t able to locate that place.</item>
-        <item>No results for that location. Can you check and try again?</item>
-        <item>Looks like that place isn’t on my map data.</item>
-        <item>I couldn’t find that spot. Maybe try with a different name?</item>
+        <item>Не могу найти такое место, попробуйте ещё раз.</item>
+        <item>Извините, не поняла, где это.</item>
+        <item>Не удалось определить это место.</item>
+        <item>По этому месту ничего не найдено. Проверьте и повторите?</item>
+        <item>Похоже, этого места нет на моих картах.</item>
+        <item>Не нашла это место. Может, попробуете другое название?</item>
     </string-array>
 
     <string-array name="weather_report_unavailable">
-        <item>Seems weather report is not available, please try again.</item>
-        <item>Sorry, I couldn’t get the weather right now.</item>
-        <item>The weather service isn’t responding. Please try later.</item>
-        <item>Looks like weather data is down at the moment.</item>
-        <item>I wasn’t able to fetch the forecast. Can you retry later?</item>
-        <item>Weather info isn’t available right now. Please check back soon.</item>
+        <item>Похоже, прогноз погоды недоступен. Попробуйте ещё раз.</item>
+        <item>Извините, не удалось получить погоду.</item>
+        <item>Сервис погоды не отвечает. Попробуйте позже.</item>
+        <item>Похоже, данные о погоде сейчас недоступны.</item>
+        <item>Не удалось загрузить прогноз. Повторите позже?</item>
+        <item>Информация о погоде недоступна. Загляните чуть позже.</item>
     </string-array>
 
     <string-array name="location_unknown_suggest_city">
-        <item>Your location is not available to me. Please try again with your city name.</item>
-        <item>I couldn’t detect your location. Could you tell me your city instead?</item>
-        <item>Looks like location services aren’t working. Please provide your city name.</item>
-        <item>I’m not getting your location right now. Can you enter your city?</item>
-        <item>Sorry, I can’t access your current location. A city name would help.</item>
-        <item>Your location seems unavailable. Please try with your city name.</item>
+        <item>Ваше местоположение мне недоступно. Попробуйте указать город.</item>
+        <item>Не удалось определить местоположение. Назовите город, пожалуйста.</item>
+        <item>Похоже, геолокация не работает. Укажите название города.</item>
+        <item>Я не получаю вашу геолокацию. Можете назвать город?</item>
+        <item>Извините, нет доступа к текущему местоположению. Поможет название города.</item>
+        <item>Местоположение недоступно. Попробуйте указать город.</item>
     </string-array>
 
     <string-array name="invalid_time">
-        <item>That doesn\'t seems like an actual time. Please try again.</item>
-        <item>I didn’t recognize that as a valid time.</item>
-        <item>That time format looks off. Could you retry?</item>
-        <item>Sorry, I couldn’t understand that time input.</item>
-        <item>That doesn’t look like a proper time. Please try again.</item>
-        <item>Can you give me a valid time so I can continue?</item>
+        <item>Похоже, это не время. Попробуйте ещё раз.</item>
+        <item>Не распознала это как время.</item>
+        <item>Формат времени непонятен. Повторите, пожалуйста.</item>
+        <item>Извините, не поняла это время.</item>
+        <item>Это не похоже на корректное время. Попробуйте ещё раз.</item>
+        <item>Назовите корректное время, и я продолжу.</item>
     </string-array>
 
     <string-array name="alarm_set_success">
-        <item>Alarm set successfully...</item>
-        <item>Done! Your alarm is ready.</item>
-        <item>Great, I’ve set the alarm for you.</item>
-        <item>All set, your alarm has been scheduled.</item>
-        <item>Alarm saved successfully.</item>
-        <item>Okay, I’ve configured the alarm as requested.</item>
+        <item>Будильник установлен…</item>
+        <item>Готово! Будильник установлен.</item>
+        <item>Отлично, будильник поставлен.</item>
+        <item>Всё готово, будильник запланирован.</item>
+        <item>Будильник сохранён.</item>
+        <item>Хорошо, настроила будильник как просили.</item>
     </string-array>
 
     <string-array name="reminder_set_success">
-        <item>Reminder set successfully...</item>
-        <item>Done! Your reminder is ready.</item>
-        <item>Great, I’ve saved the reminder for you.</item>
-        <item>All set, your reminder has been scheduled.</item>
-        <item>Reminder saved successfully.</item>
-        <item>Okay, I’ve created the reminder as requested.</item>
+        <item>Напоминание установлено…</item>
+        <item>Готово! Напоминание создано.</item>
+        <item>Отлично, напоминание сохранено.</item>
+        <item>Всё готово, напоминание запланировано.</item>
+        <item>Напоминание сохранено.</item>
+        <item>Хорошо, создала напоминание как просили.</item>
     </string-array>
 
     <string-array name="prompt_for_time">
-        <item>Sure, at what time?</item>
-        <item>Alright, when should I set it?</item>
-        <item>Okay, what time would you like?</item>
-        <item>Got it, please tell me the time.</item>
-        <item>When do you want me to set it for?</item>
-        <item>Sure thing, what time works for you?</item>
+        <item>Конечно, во сколько?</item>
+        <item>Хорошо, на какое время поставить?</item>
+        <item>Договорились, во сколько?</item>
+        <item>Поняла, назовите время.</item>
+        <item>На какое время поставить?</item>
+        <item>Конечно, какое время удобно?</item>
     </string-array>
 
     <string-array name="generic_error">
-        <item>Something went wrong, please try again.</item>
-        <item>Oops, that didn’t work. Please retry.</item>
-        <item>I ran into an issue. Can you try again?</item>
-        <item>Sorry, something broke there. Please try once more.</item>
-        <item>That didn’t go through. Could you retry?</item>
-        <item>An error popped up. Let’s try that again.</item>
+        <item>Что-то пошло не так, попробуйте ещё раз.</item>
+        <item>Ой, не получилось. Повторите, пожалуйста.</item>
+        <item>Возникла проблема. Попробуете снова?</item>
+        <item>Извините, что-то сломалось. Попробуйте ещё раз.</item>
+        <item>Не прошло. Можете повторить?</item>
+        <item>Появилась ошибка. Давайте попробуем снова.</item>
     </string-array>
 
     <!-- Speech to Text Settings -->
-    <string name="stt_settings_title">Speech to Text Settings</string>
-    <string name="parakeet_model_title">NVIDIA Parakeet Offline Model</string>
-    <string name="parakeet_model_desc">The NVIDIA Parakeet TDT 0.6B v2 model is highly accurate but heavy (~660 MB). Downloading and using it will take time and storage.</string>
-    <string name="status_installed">Status: Installed (~660 MB)</string>
-    <string name="delete_model">Delete Model</string>
-    <string name="status_not_downloaded">Status: Not Downloaded</string>
-    <string name="download_model">Download Model</string>
-    <string name="downloading_progress">Downloading… %1$d%% (%2$d MB / %3$d MB)</string>
-    <string name="download_completed">Download Completed!</string>
-    <string name="download_failed_with_msg">Download Failed: %1$s</string>
-    <string name="clear">Clear</string>
-    <string name="retry">Retry</string>
-    <string name="use_native_stt">Use Native STT (Fast)</string>
-    <string name="native_stt_desc">Uses the built-in system speech recognition. Fast and lightweight.</string>
-    <string name="use_parakeet_stt">Use Only Parakeet Model (Offline)</string>
-    <string name="parakeet_stt_desc_enabled">Highly accurate, offline-first. May have a brief cold start time when opening the microphone.</string>
-    <string name="parakeet_stt_desc_disabled">Highly accurate, offline-first. Requires downloading the model first.</string>
-    <string name="use_hybrid_stt">Use Hybrid Approach (Smart Switching)</string>
-    <string name="hybrid_stt_desc_enabled">Starts with Native STT instantly, loads Parakeet in the background, and switches automatically once loaded.</string>
-    <string name="hybrid_stt_desc_disabled">Starts with Native STT, loads Parakeet in background, and switches automatically once loaded. Requires model download.</string>
-    <string name="content_desc_installed">Installed</string>
+    <string name="stt_settings_title">Настройки распознавания речи</string>
+    <string name="parakeet_model_title">Офлайн-модель NVIDIA Parakeet</string>
+    <string name="parakeet_model_desc">Модель NVIDIA Parakeet TDT 0.6B v2 очень точная, но тяжёлая (~660 МБ). Загрузка и использование займут время и место.</string>
+    <string name="status_installed">Статус: установлена (~660 МБ)</string>
+    <string name="delete_model">Удалить модель</string>
+    <string name="status_not_downloaded">Статус: не загружена</string>
+    <string name="download_model">Скачать модель</string>
+    <string name="downloading_progress">Загрузка… %1$d%% (%2$d МБ / %3$d МБ)</string>
+    <string name="download_completed">Загрузка завершена!</string>
+    <string name="download_failed_with_msg">Ошибка загрузки: %1$s</string>
+    <string name="clear">Очистить</string>
+    <string name="retry">Повторить</string>
+    <string name="use_native_stt">Системное распознавание (быстро)</string>
+    <string name="native_stt_desc">Использует встроенное распознавание речи системы. Быстро и легко.</string>
+    <string name="use_parakeet_stt">Только модель Parakeet (офлайн)</string>
+    <string name="parakeet_stt_desc_enabled">Высокая точность, работа офлайн. При открытии микрофона возможен короткий «холодный старт».</string>
+    <string name="parakeet_stt_desc_disabled">Высокая точность, работа офлайн. Сначала нужно скачать модель.</string>
+    <string name="use_hybrid_stt">Гибридный режим (умное переключение)</string>
+    <string name="hybrid_stt_desc_enabled">Сразу начинает с системного распознавания, в фоне загружает Parakeet и переключается на неё автоматически.</string>
+    <string name="hybrid_stt_desc_disabled">Начинает с системного распознавания, в фоне загружает Parakeet и переключается автоматически. Нужна загрузка модели.</string>
+    <string name="content_desc_installed">Установлена</string>
 
     <!-- Speech API Settings -->
-    <string name="use_api_stt">Use STT API (Cloud)</string>
-    <string name="api_stt_desc">Uses the cloud STT API (Groq Whisper) for highly accurate speech transcription.</string>
-    <string name="use_api_tts">Use TTS API (Cloud)</string>
-    <string name="api_tts_desc">Uses the cloud TTS API (Edge-TTS) for high-quality natural voice generation.</string>
+    <string name="use_api_stt">Облачное распознавание (STT API)</string>
+    <string name="api_stt_desc">Использует облачный STT API (Groq Whisper) для точной расшифровки речи.</string>
+    <string name="use_api_tts">Облачной синтез речи (TTS API)</string>
+    <string name="api_tts_desc">Использует облачный TTS API (Edge-TTS) для естественного голоса.</string>
 
     <!-- Default Assistant Settings -->
-    <string name="default_assistant_title">Default Assistant App</string>
-    <string name="default_assistant_desc">Configure this app as your default system-wide voice and digital assistant.</string>
-    <string name="default_assistant_status_active">Current Status: Default Assistant</string>
-    <string name="default_assistant_status_inactive">Current Status: Not Default Assistant</string>
-    <string name="default_assistant_btn_set">Set as Default Assistant</string>
-    <string name="default_assistant_btn_open_settings">Open Assistant Settings</string>
+    <string name="default_assistant_title">Ассистент по умолчанию</string>
+    <string name="default_assistant_desc">Назначьте это приложение голосовым и цифровым ассистентом системы.</string>
+    <string name="default_assistant_status_active">Текущий статус: ассистент по умолчанию</string>
+    <string name="default_assistant_status_inactive">Текущий статус: не ассистент по умолчанию</string>
+    <string name="default_assistant_btn_set">Сделать ассистентом по умолчанию</string>
+    <string name="default_assistant_btn_open_settings">Открыть настройки ассистента</string>
 </resources>

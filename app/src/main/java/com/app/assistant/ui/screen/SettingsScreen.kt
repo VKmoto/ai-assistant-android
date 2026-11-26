@@ -337,7 +337,7 @@ fun SettingsScreenContent(
                     IconButton(onClick = onBack) {
                         Icon(
                             painter = painterResource(id = R.drawable.ic_back),
-                            contentDescription = "Back",
+                            contentDescription = "Назад",
                             tint = MaterialTheme.colorScheme.onBackground
                         )
                     }
@@ -372,7 +372,7 @@ fun SettingsScreenContent(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     SettingsSectionHeader(
-                        title = "AI Model Provider",
+                        title = "Провайдер модели ИИ",
                         description = "Configure the main language model for chat",
                         icon = R.drawable.ic_settings
                     )
@@ -493,7 +493,7 @@ fun SettingsScreenContent(
                               ) {
                                   Icon(
                                       painter = painterResource(id = R.drawable.ic_qr_code_scanner),
-                                      contentDescription = "Scan Chat API Key"
+                                      contentDescription = "Сканировать API-ключ чата"
                                   )
                               }
                           },
@@ -516,12 +516,12 @@ fun SettingsScreenContent(
                               },
                               label = { Text(stringResource(id = R.string.llm_model)) },
                               placeholder = if (isKeyMissing) {
-                                  { Text("Enter API key to select model") }
+                                  { Text("Введите API-ключ, чтобы выбрать модель") }
                               } else null,
                               shape = RoundedCornerShape(12.dp),
                               modifier = Modifier.fillMaxWidth(),
                               supportingText = if (isKeyMissing) {
-                                  { Text("Please enter ${provider.displayName} API key to select models", color = MaterialTheme.colorScheme.error) }
+                                  { Text("Введите API-ключ ${provider.displayName}, чтобы увидеть модели", color = MaterialTheme.colorScheme.error) }
                               } else if (!modelFetchError.isNullOrBlank()) {
                                   { Text(modelFetchError, color = MaterialTheme.colorScheme.error) }
                               } else null,
@@ -529,7 +529,7 @@ fun SettingsScreenContent(
                                   IconButton(onClick = { modelDropdownExpanded = !modelDropdownExpanded }) {
                                       Icon(
                                           painter = painterResource(id = R.drawable.ic_arrow_drop_down),
-                                          contentDescription = "Show suggested models"
+                                          contentDescription = "Показать рекомендуемые модели"
                                       )
                                   }
                               }
@@ -548,13 +548,13 @@ fun SettingsScreenContent(
                                           ) {
                                               Icon(
                                                   imageVector = Icons.Default.Info,
-                                                  contentDescription = "API key required",
+                                                  contentDescription = "Нужен API-ключ",
                                                   tint = MaterialTheme.colorScheme.primary,
                                                   modifier = Modifier.size(20.dp)
                                               )
                                               Spacer(modifier = Modifier.width(8.dp))
                                               Text(
-                                                  text = "Please enter your ${provider.displayName} API key first to view available models.",
+                                                  text = "Сначала введите API-ключ ${provider.displayName}, чтобы увидеть доступные модели.",
                                                   style = MaterialTheme.typography.bodyMedium,
                                                   color = MaterialTheme.colorScheme.onSurface
                                               )
@@ -574,7 +574,7 @@ fun SettingsScreenContent(
                                                   strokeWidth = 2.dp
                                               )
                                               Spacer(modifier = Modifier.width(12.dp))
-                                              Text("Fetching models...")
+                                              Text("Загружаю модели…")
                                           }
                                       },
                                       onClick = {}
@@ -590,11 +590,11 @@ fun SettingsScreenContent(
                                               ) {
                                                   Icon(
                                                       painter = painterResource(id = R.drawable.ic_restart),
-                                                      contentDescription = "Fetch latest",
+                                                      contentDescription = "Загрузить список",
                                                       modifier = Modifier.size(16.dp)
                                                   )
                                                   Spacer(modifier = Modifier.width(12.dp))
-                                                  Text("Fetch latest models from API")
+                                                  Text("Загрузить модели с сервера")
                                               }
                                           },
                                           onClick = {
@@ -627,7 +627,7 @@ fun SettingsScreenContent(
                                       }
                                   } else if (provider == LlmProvider.CUSTOM) {
                                       DropdownMenuItem(
-                                          text = { Text("No models loaded yet. Tap 'Fetch latest models from API' above or enter model name manually.") },
+                                          text = { Text("Модели ещё не загружены. Нажмите «Загрузить модели с сервера» или введите название вручную.") },
                                           onClick = {
                                               if (customUrl.isNotBlank()) {
                                                   onFetchModelsForProvider(
@@ -643,7 +643,7 @@ fun SettingsScreenContent(
                                       )
                                   } else {
                                       DropdownMenuItem(
-                                          text = { Text("No models loaded yet. Tap 'Fetch latest models from API' above.") },
+                                          text = { Text("Модели ещё не загружены. Нажмите «Загрузить модели с сервера».") },
                                           onClick = {
                                               onFetchModelsForProvider(
                                                   provider,
@@ -697,7 +697,7 @@ fun SettingsScreenContent(
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         SettingsSectionHeader(
-                            title = "Custom Endpoint Configuration",
+                            title = "Настройка своего сервера",
                             description = "Define custom API mappings and endpoints",
                             icon = R.drawable.ic_settings
                         )
@@ -712,8 +712,8 @@ fun SettingsScreenContent(
                                 settingsViewModel.clearAutoDetectStatus()
                                 onResetVerificationState()
                             },
-                            label = { Text("API Endpoint URL") },
-                            placeholder = { Text("e.g. http://192.168.1.3:11434") },
+                            label = { Text("URL API") },
+                            placeholder = { Text("например, http://192.168.1.3:11434") },
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -761,15 +761,15 @@ fun SettingsScreenContent(
                                     color = MaterialTheme.colorScheme.onPrimary
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("Detecting Server...")
+                                Text("Определяю сервер…")
                             } else {
                                 Icon(
                                     painter = painterResource(id = R.drawable.ic_restart),
-                                    contentDescription = "Auto-Detect",
+                                    contentDescription = "Автоопределение",
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("Auto-Detect Server & Models", fontWeight = FontWeight.SemiBold)
+                                Text("Определить сервер и модели автоматически", fontWeight = FontWeight.SemiBold)
                             }
                         }
 
@@ -820,13 +820,13 @@ fun SettingsScreenContent(
                                 value = selectedPreset.displayName,
                                 onValueChange = {},
                                 readOnly = true,
-                                label = { Text("Server Compatibility Preset") },
+                                label = { Text("Шаблон совместимости сервера") },
                                 supportingText = { Text(selectedPreset.description) },
                                 trailingIcon = {
                                     IconButton(onClick = { presetDropdownExpanded = !presetDropdownExpanded }) {
                                         Icon(
                                             painter = painterResource(id = R.drawable.ic_arrow_drop_down),
-                                            contentDescription = "Select Preset"
+                                            contentDescription = "Выберите шаблон"
                                         )
                                     }
                                 },
@@ -890,7 +890,7 @@ fun SettingsScreenContent(
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = "Advanced Payload & Role Mappings",
+                                        text = "Расширенная настройка запроса и ролей",
                                         style = MaterialTheme.typography.bodyMedium,
                                         fontWeight = FontWeight.SemiBold
                                     )
@@ -918,7 +918,7 @@ fun SettingsScreenContent(
                                         selectedPreset = CustomServerPreset.CUSTOM
                                         onResetVerificationState()
                                     },
-                                    label = { Text("Custom Headers (JSON)") },
+                                    label = { Text("Свои заголовки (JSON)") },
                                     shape = RoundedCornerShape(12.dp),
                                     modifier = Modifier.fillMaxWidth()
                                 )
@@ -933,7 +933,7 @@ fun SettingsScreenContent(
                                         selectedPreset = CustomServerPreset.CUSTOM
                                         onResetVerificationState()
                                     },
-                                    label = { Text("Response Extraction JSON Path") },
+                                    label = { Text("Путь к ответу (JSON)") },
                                     shape = RoundedCornerShape(12.dp),
                                     modifier = Modifier.fillMaxWidth()
                                 )
@@ -948,7 +948,7 @@ fun SettingsScreenContent(
                                         selectedPreset = CustomServerPreset.CUSTOM
                                         onResetVerificationState()
                                     },
-                                    label = { Text("Request Body JSON Template") },
+                                    label = { Text("Шаблон тела запроса (JSON)") },
                                     shape = RoundedCornerShape(12.dp),
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -966,7 +966,7 @@ fun SettingsScreenContent(
                                         selectedPreset = CustomServerPreset.CUSTOM
                                         onResetVerificationState()
                                     },
-                                    label = { Text("Single Message Format (JSON)") },
+                                    label = { Text("Формат сообщения (JSON)") },
                                     shape = RoundedCornerShape(12.dp),
                                     modifier = Modifier.fillMaxWidth()
                                 )
@@ -981,7 +981,7 @@ fun SettingsScreenContent(
                                         selectedPreset = CustomServerPreset.CUSTOM
                                         onResetVerificationState()
                                     },
-                                    label = { Text("System Role Mapping") },
+                                    label = { Text("Системная роль") },
                                     shape = RoundedCornerShape(12.dp),
                                     modifier = Modifier.fillMaxWidth()
                                 )
@@ -996,7 +996,7 @@ fun SettingsScreenContent(
                                         selectedPreset = CustomServerPreset.CUSTOM
                                         onResetVerificationState()
                                     },
-                                    label = { Text("User Role Mapping") },
+                                    label = { Text("Роль пользователя") },
                                     shape = RoundedCornerShape(12.dp),
                                     modifier = Modifier.fillMaxWidth()
                                 )
@@ -1011,7 +1011,7 @@ fun SettingsScreenContent(
                                         selectedPreset = CustomServerPreset.CUSTOM
                                         onResetVerificationState()
                                     },
-                                    label = { Text("Assistant Role Mapping") },
+                                    label = { Text("Роль ассистента") },
                                     shape = RoundedCornerShape(12.dp),
                                     modifier = Modifier.fillMaxWidth()
                                 )
@@ -1035,7 +1035,7 @@ fun SettingsScreenContent(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     SettingsSectionHeader(
-                        title = "Integrations",
+                        title = "Интеграции",
                         description = "Manage credentials for third-party integrations",
                         icon = R.drawable.ic_settings
                     )
@@ -1058,7 +1058,7 @@ fun SettingsScreenContent(
                             ) {
                                 Icon(
                                     painter = painterResource(id = R.drawable.ic_qr_code_scanner),
-                                    contentDescription = "Scan YouTube API Key"
+                                    contentDescription = "Сканировать API-ключ YouTube"
                                 )
                             }
                         },
@@ -1188,14 +1188,14 @@ fun SettingsScreenContent(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     SettingsSectionHeader(
-                        title = "Text-to-Speech Settings",
+                        title = "Настройки синтеза речи",
                         description = "Configure how the assistant speaks back to you",
                         icon = R.drawable.ic_speaker
                     )
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Text(
-                        text = "Using an offline TTS model will require device storage for voice processing.",
+                        text = "Офлайн-модель синтеза речи занимает место на устройстве.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                     )
@@ -1208,7 +1208,7 @@ fun SettingsScreenContent(
                             ttsMode = com.app.assistant.tts.TtsMode.NATIVE
                             settingsViewModel.updateTtsMode(com.app.assistant.tts.TtsMode.NATIVE)
                         },
-                        title = "Use Native TTS (Fast)",
+                        title = "Системный синтез речи (быстро)",
                         description = "Uses the built-in system text-to-speech engine.",
                         trailingContent = {
                             IconButton(
@@ -1219,7 +1219,7 @@ fun SettingsScreenContent(
                                     } catch (e: Exception) {
                                         android.widget.Toast.makeText(
                                             context,
-                                            "Could not open TTS settings",
+                                            "Не удалось открыть настройки синтеза речи",
                                             android.widget.Toast.LENGTH_SHORT
                                         ).show()
                                     }
@@ -1228,7 +1228,7 @@ fun SettingsScreenContent(
                             ) {
                                 Icon(
                                     painter = painterResource(id = R.drawable.ic_settings),
-                                    contentDescription = "Open System TTS Settings",
+                                    contentDescription = "Открыть системные настройки синтеза речи",
                                     tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(20.dp)
                                 )
@@ -1244,7 +1244,7 @@ fun SettingsScreenContent(
                             ttsMode = com.app.assistant.tts.TtsMode.OFFLINE
                             settingsViewModel.updateTtsMode(com.app.assistant.tts.TtsMode.OFFLINE)
                         },
-                        title = "Use Offline TTS Model",
+                        title = "Офлайн-модель синтеза речи",
                         description = if (isTtsInstalled) {
                             "Uses Supertonic/ONNX engine on-device without internet."
                         } else {
@@ -1282,7 +1282,7 @@ fun SettingsScreenContent(
                             ) {
                                 Icon(
                                     painter = painterResource(id = R.drawable.ic_qr_code_scanner),
-                                    contentDescription = "Scan Edge TTS Key"
+                                    contentDescription = "Сканировать ключ Edge TTS"
                                 )
                             }
                         },
@@ -1293,7 +1293,7 @@ fun SettingsScreenContent(
                     Spacer(modifier = Modifier.height(12.dp))
                     
                     ModelDownloadCard(
-                        title = "Supertonic English Model (int8)",
+                        title = "Английская модель Supertonic (int8)",
                         description = "Supertonic v3 English int8 model.",
                         isInstalled = isTtsInstalled,
                         downloadState = ttsDownloadState,
@@ -1302,10 +1302,10 @@ fun SettingsScreenContent(
                         onCancel = onCancelTtsModelDownload,
                         onClear = onDeleteTtsModel,
                         onRetry = onStartTtsModelDownload,
-                        installedText = "Installed (~66 MB)",
-                        notDownloadedText = "Status: Not Downloaded",
-                        deleteButtonText = "Delete",
-                        downloadButtonText = "Download"
+                        installedText = "Установлена (~66 МБ)",
+                        notDownloadedText = "Статус: не загружена",
+                        deleteButtonText = "Удалить",
+                        downloadButtonText = "Скачать"
                     )
                 }
             }
@@ -1325,7 +1325,7 @@ fun SettingsScreenContent(
 //            ) {
 //                Column(modifier = Modifier.padding(16.dp)) {
 //                    SettingsSectionHeader(
-//                        title = "Offline Translation Settings",
+//                        title = "Настройки офлайн-перевода",
 //                        description = "Translate queries and responses offline using Google ML Kit models.",
 //                        icon = R.drawable.ic_translate
 //                    )
@@ -1339,12 +1339,12 @@ fun SettingsScreenContent(
 //                    ) {
 //                        Column(modifier = Modifier.weight(1f)) {
 //                            Text(
-//                                text = "Enable Translation",
+//                                text = "Включить перевод",
 //                                style = MaterialTheme.typography.bodyLarge,
 //                                fontWeight = FontWeight.Bold
 //                            )
 //                            Text(
-//                                text = "Translate chat messages and voice input",
+//                                text = "Переводить сообщения чата и голосовой ввод",
 //                                style = MaterialTheme.typography.bodySmall,
 //                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
 //                            )
@@ -1388,21 +1388,21 @@ fun SettingsScreenContent(
 //                                Spacer(modifier = Modifier.width(16.dp))
 //                                Column(modifier = Modifier.weight(1f)) {
 //                                    Text(
-//                                        text = "Default Language",
+//                                        text = "Язык по умолчанию",
 //                                        style = MaterialTheme.typography.bodyLarge,
 //                                        fontWeight = FontWeight.Bold,
 //                                        color = MaterialTheme.colorScheme.onSurface
 //                                    )
 //                                    Spacer(modifier = Modifier.height(2.dp))
 //                                    Text(
-//                                        text = "Selected: $activeLangName",
+//                                        text = "Выбран: $activeLangName",
 //                                        style = MaterialTheme.typography.bodySmall,
 //                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
 //                                    )
 //                                }
 //                                Icon(
 //                                    painter = painterResource(id = R.drawable.ic_arrow_drop_down),
-//                                    contentDescription = "Select language",
+//                                    contentDescription = "Выберите язык",
 //                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
 //                                    modifier = Modifier.size(24.dp)
 //                                )
@@ -1416,7 +1416,7 @@ fun SettingsScreenContent(
 //                            shape = RoundedCornerShape(8.dp),
 //                            modifier = Modifier.fillMaxWidth().height(40.dp)
 //                        ) {
-//                            Text("Manage Translation Models", style = MaterialTheme.typography.labelMedium)
+//                            Text("Управление моделями перевода", style = MaterialTheme.typography.labelMedium)
 //                        }
 //                    }
 //                }
@@ -1467,14 +1467,14 @@ fun SettingsScreenContent(
                         if (isDefaultAssistant) {
                             Icon(
                                 imageVector = Icons.Default.Check,
-                                contentDescription = "Active",
+                                contentDescription = "Активна",
                                 tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(24.dp)
                             )
                         } else {
                             Icon(
                                 imageVector = Icons.Default.Close,
-                                contentDescription = "Inactive",
+                                contentDescription = "Неактивна",
                                 tint = MaterialTheme.colorScheme.error,
                                 modifier = Modifier.size(24.dp)
                             )
@@ -1604,13 +1604,13 @@ fun SettingsScreenContent(
                         if (importedKeys.isNotEmpty()) {
                             android.widget.Toast.makeText(
                                 context,
-                                "Successfully imported: ${importedKeys.joinToString(", ")}",
+                                "Импортировано: ${importedKeys.joinToString(", ")}",
                                 android.widget.Toast.LENGTH_LONG
                             ).show()
                         } else {
                             android.widget.Toast.makeText(
                                 context,
-                                "QR code scanned but no matching API keys found in JSON",
+                                "QR-код распознан, но подходящих ключей в JSON нет",
                                 android.widget.Toast.LENGTH_LONG
                             ).show()
                         }
@@ -1626,17 +1626,17 @@ fun SettingsScreenContent(
                                         settingsViewModel.updateLlmModel(provider.defaultModel)
                                     }
                                     onFetchModelsForProvider(provider, trimmed, customUrl, customHeaders)
-                                    android.widget.Toast.makeText(context, "Imported Chat API Key", android.widget.Toast.LENGTH_SHORT).show()
+                                    android.widget.Toast.makeText(context, "API-ключ чата импортирован", android.widget.Toast.LENGTH_SHORT).show()
                                 }
                                 "youtube" -> {
                                     apiKey1 = trimmed
                                     settingsViewModel.updateYoutubeApiKey(trimmed)
-                                    android.widget.Toast.makeText(context, "Imported YouTube API Key", android.widget.Toast.LENGTH_SHORT).show()
+                                    android.widget.Toast.makeText(context, "API-ключ YouTube импортирован", android.widget.Toast.LENGTH_SHORT).show()
                                 }
                                 "edge_tts" -> {
                                     edgeTtsKey = trimmed
                                     settingsViewModel.updateEdgeTtsSubscriptionKey(trimmed)
-                                    android.widget.Toast.makeText(context, "Imported Edge TTS Key", android.widget.Toast.LENGTH_SHORT).show()
+                                    android.widget.Toast.makeText(context, "Ключ Edge TTS импортирован", android.widget.Toast.LENGTH_SHORT).show()
                                 }
                             }
                         }
@@ -1653,17 +1653,17 @@ fun SettingsScreenContent(
                                     settingsViewModel.updateLlmModel(provider.defaultModel)
                                 }
                                 onFetchModelsForProvider(provider, trimmed, customUrl, customHeaders)
-                                android.widget.Toast.makeText(context, "Imported Chat API Key", android.widget.Toast.LENGTH_SHORT).show()
+                                android.widget.Toast.makeText(context, "API-ключ чата импортирован", android.widget.Toast.LENGTH_SHORT).show()
                             }
                             "youtube" -> {
                                 apiKey1 = trimmed
                                 settingsViewModel.updateYoutubeApiKey(trimmed)
-                                android.widget.Toast.makeText(context, "Imported YouTube API Key", android.widget.Toast.LENGTH_SHORT).show()
+                                android.widget.Toast.makeText(context, "API-ключ YouTube импортирован", android.widget.Toast.LENGTH_SHORT).show()
                             }
                             "edge_tts" -> {
                                 edgeTtsKey = trimmed
                                 settingsViewModel.updateEdgeTtsSubscriptionKey(trimmed)
-                                android.widget.Toast.makeText(context, "Imported Edge TTS Key", android.widget.Toast.LENGTH_SHORT).show()
+                                android.widget.Toast.makeText(context, "Ключ Edge TTS импортирован", android.widget.Toast.LENGTH_SHORT).show()
                             }
                         }
                     }
@@ -1691,7 +1691,7 @@ fun VerifySection(
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Verify & Detect Capabilities", fontWeight = FontWeight.Bold)
+                    Text("Проверить и определить возможности", fontWeight = FontWeight.Bold)
                 }
             }
             is VerificationState.Verifying -> {
@@ -1716,7 +1716,7 @@ fun VerifySection(
                         )
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(
-                            text = "Verifying connection and capabilities...",
+                            text = "Проверяю соединение и возможности…",
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.onSurface
@@ -1739,13 +1739,13 @@ fun VerifySection(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Check,
-                                contentDescription = "Success",
+                                contentDescription = "Успешно",
                                 tint = Color(0xFF4CAF50),
                                 modifier = Modifier.size(20.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Verification Successful!",
+                                text = "Проверка успешна!",
                                 color = Color(0xFF4CAF50),
                                 fontWeight = FontWeight.Bold,
                                 style = MaterialTheme.typography.bodyMedium
@@ -1753,7 +1753,7 @@ fun VerifySection(
                         }
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = "Detected Model Capabilities:",
+                            text = "Возможности модели:",
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -1777,7 +1777,7 @@ fun VerifySection(
                             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("Re-Verify Settings", fontWeight = FontWeight.Bold)
+                            Text("Проверить настройки заново", fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -1797,13 +1797,13 @@ fun VerifySection(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Close,
-                                contentDescription = "Failed",
+                                contentDescription = "Ошибка",
                                 tint = MaterialTheme.colorScheme.error,
                                 modifier = Modifier.size(20.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Verification Failed",
+                                text = "Проверка не удалась",
                                 color = MaterialTheme.colorScheme.error,
                                 fontWeight = FontWeight.Bold,
                                 style = MaterialTheme.typography.bodyMedium
@@ -1822,7 +1822,7 @@ fun VerifySection(
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("Retry Verification", fontWeight = FontWeight.Bold)
+                            Text("Повторить проверку", fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -2139,7 +2139,7 @@ fun ModelDownloadCard(
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Close,
-                                    contentDescription = "Cancel",
+                                    contentDescription = "Отмена",
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
@@ -2159,7 +2159,7 @@ fun ModelDownloadCard(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         StatusBadge(
-                            text = "Download Completed!",
+                            text = "Загрузка завершена!",
                             isInstalled = true
                         )
                         OutlinedButton(
@@ -2185,7 +2185,7 @@ fun ModelDownloadCard(
                 is DownloadState.Error -> {
                     Column(modifier = Modifier.fillMaxWidth()) {
                         Text(
-                            text = "Download Failed: ${downloadState.message}",
+                            text = "Ошибка загрузки: ${downloadState.message}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.error,
                             fontWeight = FontWeight.SemiBold
@@ -2202,7 +2202,7 @@ fun ModelDownloadCard(
                                 contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                                 modifier = Modifier.height(36.dp)
                             ) {
-                                Text("Clear", style = MaterialTheme.typography.labelMedium)
+                                Text("Очистить", style = MaterialTheme.typography.labelMedium)
                             }
                             Spacer(modifier = Modifier.width(8.dp))
                             Button(
@@ -2211,7 +2211,7 @@ fun ModelDownloadCard(
                                 contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                                 modifier = Modifier.height(36.dp)
                             ) {
-                                Text("Retry", style = MaterialTheme.typography.labelMedium)
+                                Text("Повторить", style = MaterialTheme.typography.labelMedium)
                             }
                         }
                     }
@@ -2376,7 +2376,7 @@ fun TranslationLanguageManagerBottomSheet(
                 .padding(bottom = 16.dp)
         ) {
             Text(
-                text = "Translation Language Manager",
+                text = "Управление языками перевода",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
@@ -2387,14 +2387,14 @@ fun TranslationLanguageManagerBottomSheet(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 value = searchQuery,
-                placeholder = { Text("Search languages…") },
+                placeholder = { Text("Поиск языков…") },
                 singleLine = true,
                 onValueChange = { searchQuery = it },
                 shape = RoundedCornerShape(12.dp),
                 leadingIcon = {
                     Icon(
                         imageVector = androidx.compose.material.icons.Icons.Default.Info,
-                        contentDescription = "Search"
+                        contentDescription = "Поиск"
                     )
                 }
             )
@@ -2458,7 +2458,7 @@ fun TranslationLanguageManagerBottomSheet(
                                     fontWeight = if (isDefault) FontWeight.Bold else FontWeight.Normal
                                 )
                                 Text(
-                                    text = "Code: $langCode",
+                                    text = "Код: $langCode",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                                 )
@@ -2475,13 +2475,13 @@ fun TranslationLanguageManagerBottomSheet(
                                 }
                                 isDownloaded -> {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        StatusBadge(text = "Installed", isInstalled = true)
+                                        StatusBadge(text = "Установлена", isInstalled = true)
                                         Spacer(modifier = Modifier.width(8.dp))
                                         if (langCode != "en") {
                                             IconButton(onClick = { onDeleteLanguage(langCode) }) {
                                                 Icon(
                                                     imageVector = androidx.compose.material.icons.Icons.Default.Delete,
-                                                    contentDescription = "Delete model",
+                                                    contentDescription = "Удалить модель",
                                                     tint = MaterialTheme.colorScheme.error
                                                 )
                                             }
@@ -2497,7 +2497,7 @@ fun TranslationLanguageManagerBottomSheet(
                                     ) {
                                         Icon(
                                             painter = painterResource(id = R.drawable.ic_download),
-                                            contentDescription = "Download model",
+                                            contentDescription = "Скачать модель",
                                             tint = MaterialTheme.colorScheme.primary
                                         )
                                     }

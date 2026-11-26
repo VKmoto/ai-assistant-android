@@ -174,7 +174,7 @@ fun UserInputField(
                             IconButton(onClick = { menuExpanded = true }) {
                                 Icon(
                                     painter = painterResource(id = R.drawable.ic_attachment),
-                                    contentDescription = "Attach file",
+                                    contentDescription = "Прикрепить файл",
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
@@ -184,14 +184,14 @@ fun UserInputField(
                             ) {
                                 if (isImageSupported) {
                                     DropdownMenuItem(
-                                        text = { Text("Image") },
+                                        text = { Text("Изображение") },
                                         onClick = {
                                             menuExpanded = false
                                             onAttachClick("image/*")
                                         }
                                     )
                                     DropdownMenuItem(
-                                        text = { Text("Take Photo (Camera)") },
+                                        text = { Text("Сделать фото (камера)") },
                                         onClick = {
                                             menuExpanded = false
                                             onAttachClick("camera")
@@ -200,7 +200,7 @@ fun UserInputField(
                                 }
                                 if (isAudioSupported) {
                                     DropdownMenuItem(
-                                        text = { Text("Audio") },
+                                        text = { Text("Аудио") },
                                         onClick = {
                                             menuExpanded = false
                                             onAttachClick("audio/*")
@@ -209,7 +209,7 @@ fun UserInputField(
                                 }
                                 if (isVideoSupported) {
                                     DropdownMenuItem(
-                                        text = { Text("Video") },
+                                        text = { Text("Видео") },
                                         onClick = {
                                             menuExpanded = false
                                             onAttachClick("video/*")
@@ -218,7 +218,7 @@ fun UserInputField(
                                 }
                                 if (isDocumentSupported) {
                                     DropdownMenuItem(
-                                        text = { Text("Document (PDF)") },
+                                        text = { Text("Документ (PDF)") },
                                         onClick = {
                                             menuExpanded = false
                                             onAttachClick("application/pdf")
@@ -227,7 +227,7 @@ fun UserInputField(
                                 }
                                 // Always support text files as they are decrypted and appended inline as text
                                 DropdownMenuItem(
-                                    text = { Text("Text Document (.txt/.csv/.json)") },
+                                    text = { Text("Текстовый файл (.txt/.csv/.json)") },
                                     onClick = {
                                         menuExpanded = false
                                         onAttachClick("text/*")
@@ -255,28 +255,21 @@ fun UserInputField(
                                     contentDescription = stringResource(id = R.string.stop_desc),
                                 )
                             }
-                        } else {
-                            IconButton(onClick = {
-                                onStartListening()
-                            }) {
-                                Icon(
-                                    painter = painterResource(id = R.drawable.ic_mic),
-                                    contentDescription = stringResource(id = R.string.mic_desc),
-                                )
-                            }
                         }
-                        AnimatedVisibility(
-                            visible = !showSendButton,
-                            enter = fadeIn() + expandHorizontally(),
-                            exit = fadeOut() + shrinkHorizontally()
-                        ) {
-                            IconButton(onClick = onToggleHandsFree) {
-                                Icon(
-                                    painter = painterResource(id = R.drawable.ic_live_modes),
-                                    contentDescription = "Toggle Hands-free Mode",
-                                    tint = if (isHandsFree) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
+                        // Микрофон — это ФЛАГ режима разговора, а не разовый ввод: нажал —
+                        // приложение слушает и отвечает непрерывно, нажал ещё раз — выключил.
+                        // Так владелец может разговаривать, не трогая экран (приложение —
+                        // ассистент по умолчанию), а состояние видно по цвету иконки.
+                        IconButton(onClick = onToggleHandsFree) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.ic_mic),
+                                contentDescription = stringResource(id = R.string.voice_mode_desc),
+                                tint = if (isHandsFree) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                            )
                         }
                         AnimatedVisibility(
                             visible = showSendButton,
@@ -408,7 +401,7 @@ fun AttachmentPreviewCard(
         ) {
             Icon(
                 imageVector = Icons.Default.Close,
-                contentDescription = "Remove",
+                contentDescription = "Убрать",
                 tint = Color.White,
                 modifier = Modifier.size(12.dp)
             )

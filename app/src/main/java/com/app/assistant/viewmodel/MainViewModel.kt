@@ -344,23 +344,20 @@ class MainViewModel(
     }
 
     fun toggleHandsFreeMode() {
-        val modelManager = com.app.assistant.speech.SpeechModelManager(getApplication())
-        val isDownloaded = modelManager.isModelDownloaded()
-        if (!isDownloaded && !_isHandsFreeModeActive.value) {
-            triggerToast("Offline speech models are required for Hands-Free mode. Please download them in settings.")
-            return
-        }
         setHandsFreeModeActive(!_isHandsFreeModeActive.value)
     }
 
+    /**
+     * Режим разговора.
+     *
+     * Раньше включение блокировалось, если не скачаны офлайн-модели распознавания. Это
+     * противоречило движку: SpeechRecognizerManager при отсутствии модели сам падает на
+     * системный STT (см. "Falling back to Native STT"). То есть режим был технически
+     * доступен, но UI его не пускал — и владелец видел «нужны модели» вместо разговора.
+     * Теперь включаем всегда: качество распознавания решает выбранный STT-режим, а не
+     * наличие файла.
+     */
     fun setHandsFreeModeActive(active: Boolean) {
-        if (active) {
-            val modelManager = com.app.assistant.speech.SpeechModelManager(getApplication())
-            if (!modelManager.isModelDownloaded()) {
-                triggerToast("Offline speech models are required for Hands-Free mode. Please download them in settings.")
-                return
-            }
-        }
         _isHandsFreeModeActive.value = active
         if (active) {
             _isCustomUI.value = false // Keep standard layout size so our overlay takes full screen
@@ -430,7 +427,7 @@ class MainViewModel(
                 val index = chatList.indexOfFirst { it.id == loadingItemId }
                 if (index != -1) {
                     val item = chatList[index].copy(
-                        text = "Classification failed to load.",
+                        text = "Не удалось загрузить классификатор.",
                         isMe = false,
                         isLoading = false,
                         isStreaming = false,
@@ -444,11 +441,13 @@ class MainViewModel(
 
     init {
         if (speak) {
+            // Запуск ассистентом (ASSIST/VOICE_COMMAND) — это разговор, а не чтение чата.
+            // Режим включаем ДО startSpeechRecognition: иначе первое слушание уходит как
+            // разовое, и после ответа микрофон замолкает до следующего нажатия.
+            setHandsFreeModeActive(true)
             _isCustomUI.value = true
             _isCustomUIHalfPage.value = true
             _isListening.value = true
-        }
-        if (speak) {
             startSpeechRecognition()
         }
         initializeTextClassifier()

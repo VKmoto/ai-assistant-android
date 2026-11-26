@@ -74,6 +74,12 @@ class MainActivity : ComponentActivity() {
 
     private var isScreenServiceRunning = false
     private var isActivityStarted = false
+    /**
+     * Запуск «как ассистент» (долгое нажатие home / VOICE_COMMAND) обрабатываем один раз
+     * за жизнь Activity: onStart случается и при возврате из настроек, и повторное
+     * включение режима разговора там было бы сюрпризом.
+     */
+    private var assistantLaunchHandled = false
     private var activeCollectionJob: kotlinx.coroutines.Job? = null
 
     private val screenCaptureLauncher = registerForActivityResult(
@@ -91,7 +97,7 @@ class MainActivity : ComponentActivity() {
             isScreenServiceRunning = true
             viewModel.setScreenModeActive(true)
         } else {
-            Toast.makeText(this, "Screen capture permission denied", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Доступ к захвату экрана запрещён", Toast.LENGTH_SHORT).show()
             isScreenServiceRunning = false
             viewModel.setScreenModeActive(false)
         }
@@ -109,7 +115,7 @@ class MainActivity : ComponentActivity() {
             screenCaptureLauncher.launch(intent)
         } catch (e: Exception) {
             Log.e("MainActivity", "Failed to launch screen capture intent", e)
-            Toast.makeText(this, "Screen capture not supported or failed to launch", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Захват экрана не поддерживается или не запустился", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -133,6 +139,9 @@ class MainActivity : ComponentActivity() {
             if (::speechRecognizerManager.isInitialized) {
                 speechRecognizerManager.isTtsSpeaking = isSpeaking
             }
+            // Режим разговора: договорили — снова слушаем. Без этого после первого ответа
+            // микрофон замолкал до следующего нажатия, то есть «разговор» был одноразовым.
+            if (!isSpeaking) resumeHandsFreeListening()
         }
         speechRecognizerManager = com.app.assistant.speech.SpeechRecognizerManager(this, lifecycleScope)
         speechRecognizerManager.preLoadModelAsync()
@@ -187,6 +196,13 @@ class MainActivity : ComponentActivity() {
         super.onStart()
         isActivityStarted = true
         updateCollectionState()
+        // Приложение назначено ассистентом по умолчанию: его запускают кнопкой/голосом,
+        // чтобы ГОВОРИТЬ, а не читать чат. Поэтому сразу включаем режим разговора —
+        // иначе владельцу приходится каждый раз нажимать микрофон, что и было жалобой.
+        if (!assistantLaunchHandled && intent.getBooleanExtra("speak", false)) {
+            assistantLaunchHandled = true
+            viewModel.setHandsFreeModeActive(true)
+        }
     }
 
     override fun onStop() {
@@ -324,6 +340,30 @@ class MainActivity : ComponentActivity() {
                 }
             }
             startScreenCaptureFlow()
+        }
+    }
+
+    /**
+     * Возобновить слушание после ответа ассистента, если включён режим разговора.
+     *
+     * Небольшая задержка нужна, чтобы TTS успел освободить аудиовыход (иначе системный
+     * распознаватель получает ошибку аудиофокуса и режим «дёргается»). Проверки перед
+     * запуском защищают от двойного старта: onStart/коллектор состояния тоже могут
+     * попытаться включить слушание.
+     */
+    private fun resumeHandsFreeListening() {
+        if (!viewModel.isHandsFreeModeActive.value) return
+        if (viewModel.isListening.value || viewModel.isVoiceProcessing.value) return
+        lifecycleScope.launch {
+            delay(400)
+            if (
+                viewModel.isHandsFreeModeActive.value &&
+                !viewModel.isListening.value &&
+                !viewModel.isVoiceProcessing.value &&
+                !speechRecognizerManager.isListeningActive()
+            ) {
+                startSpeechRecognition(isHandsFree = true)
+            }
         }
     }
 
@@ -541,23 +581,26 @@ class MainActivity : ComponentActivity() {
         when (requestCode) {
             101 -> {
                 if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    startSpeechRecognition()
+                    // После выдачи разрешения продолжаем ТОТ режим, который был включён:
+                    // при запуске ассистентом это hands-free, и раньше здесь стартовало
+                    // разовое слушание, из-за чего режим выглядел выключенным.
+                    startSpeechRecognition(isHandsFree = viewModel.isHandsFreeModeActive.value)
                 } else {
-                    Toast.makeText(this, "Audio permission is required for speech recognition", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "Для распознавания речи нужно разрешение на микрофон", Toast.LENGTH_SHORT).show()
                 }
             }
             102 -> {
                 if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                     viewModel.toggleVisionMode()
                 } else {
-                    Toast.makeText(this, "Camera permission is required for Vision Mode", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "Для режима зрения нужно разрешение на камеру", Toast.LENGTH_SHORT).show()
                 }
             }
             103 -> {
                 if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                     startScreenCaptureFlow()
                 } else {
-                    Toast.makeText(this, "Notification permission is required to show controls in the status bar", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, "Для управления из строки состояния нужно разрешение на уведомления", Toast.LENGTH_LONG).show()
                     startScreenCaptureFlow()
                 }
             }

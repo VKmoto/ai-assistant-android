@@ -276,7 +276,7 @@ fun HandsFreeBar(
             ) {
                 Icon(
                     painter = painterResource(id = R.drawable.ic_camera),
-                    contentDescription = "Camera (Hands-free)",
+                    contentDescription = "Камера (режим разговора)",
                     tint = if (isVisionModeActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -286,7 +286,7 @@ fun HandsFreeBar(
             ) {
                 Icon(
                     painter = painterResource(id = R.drawable.ic_screen_share),
-                    contentDescription = "Share Screen (Hands-free)",
+                    contentDescription = "Показ экрана (режим разговора)",
                     tint = if (isScreenModeActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -498,7 +498,7 @@ fun HandsFreeBar(
             ) {
                 Icon(
                     imageVector = Icons.Default.Close,
-                    contentDescription = "Exit Hands-free",
+                    contentDescription = "Выйти из режима разговора",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }

@@ -203,12 +203,12 @@ fun ChatLayout(
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Warning,
-                                    contentDescription = "Warning",
+                                    contentDescription = "Предупреждение",
                                     tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(20.dp)
                                 )
                                 Text(
-                                    text = "Current model does not support some media in this chat. Incompatible past attachments will be ignored by the LLM.",
+                                    text = "Текущая модель не поддерживает часть вложений в этом чате. Несовместимые вложения будут проигнорированы.",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.weight(1f)
@@ -219,7 +219,7 @@ fun ChatLayout(
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Close,
-                                        contentDescription = "Dismiss warning",
+                                        contentDescription = "Закрыть предупреждение",
                                         tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                         modifier = Modifier.size(16.dp)
                                     )
@@ -260,7 +260,7 @@ fun ChatLayout(
                                     ) {
                                         Icon(
                                             painter = painterResource(id = R.drawable.ic_switch_camera),
-                                            contentDescription = "Switch Camera",
+                                            contentDescription = "Переключить камеру",
                                             tint = Color.White
                                         )
                                     }
@@ -271,7 +271,7 @@ fun ChatLayout(
                                     ) {
                                         Icon(
                                             painter = painterResource(id = R.drawable.ic_fullscreen),
-                                            contentDescription = "Expand Camera Preview",
+                                            contentDescription = "Развернуть предпросмотр камеры",
                                             tint = Color.White
                                         )
                                     }
@@ -301,7 +301,7 @@ fun ChatLayout(
                         ) {
                             Icon(
                                 painter = painterResource(id = R.drawable.ic_switch_camera),
-                                contentDescription = "Switch Camera",
+                                contentDescription = "Переключить камеру",
                                 tint = Color.White
                             )
                         }
@@ -312,7 +312,7 @@ fun ChatLayout(
                         ) {
                             Icon(
                                 painter = painterResource(id = R.drawable.ic_fullscreen_exit),
-                                contentDescription = "Collapse Camera Preview",
+                                contentDescription = "Свернуть предпросмотр камеры",
                                 tint = Color.White
                             )
                         }
@@ -425,11 +425,11 @@ fun ChatLayoutPreview() {
             isCustomUI = false,
             chatList = listOf(
                 Conversation(
-                    text = "What is the weather today?",
+                    text = "Какая сегодня погода?",
                     isMe = true
                 ),
                 Conversation(
-                    text = "The weather is sunny at 22°C.",
+                    text = "Сегодня солнечно, 22°C.",
                     isMe = false
                 )
             ),

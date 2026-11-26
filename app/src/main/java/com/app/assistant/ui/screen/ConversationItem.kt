@@ -355,7 +355,7 @@ private fun OtherCard(
                                     modifier = Modifier.padding(end = 8.dp)
                                 )
                                 Text(
-                                    text = "Thinking Process",
+                                    text = "Как я думала",
                                     style = MaterialTheme.typography.labelLarge.copy(
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.primary
@@ -531,7 +531,7 @@ fun ImageAttachmentBubble(
                         context.startActivity(intent)
                     } catch (e: Exception) {
                         withContext(Dispatchers.Main) {
-                            android.widget.Toast.makeText(context, "Cannot open image: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                            android.widget.Toast.makeText(context, "Не удалось открыть изображение: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
                         }
                     }
                 }
@@ -569,7 +569,7 @@ fun ImageAttachmentBubble(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "Failed to load image",
+                    text = "Не удалось загрузить изображение",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error
                 )
@@ -713,7 +713,7 @@ fun VideoAttachmentBubble(attachment: Attachment) {
                     context.startActivity(intent)
                 } catch (e: Exception) {
                     withContext(Dispatchers.Main) {
-                        android.widget.Toast.makeText(context, "Cannot play video: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                        android.widget.Toast.makeText(context, "Не удалось воспроизвести видео: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
                     }
                 }
             }
@@ -725,7 +725,7 @@ fun VideoAttachmentBubble(attachment: Attachment) {
         ) {
             Icon(
                 painter = painterResource(id = R.drawable.ic_stop),
-                contentDescription = "Play Video",
+                contentDescription = "Воспроизвести видео",
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(32.dp)
             )
@@ -739,7 +739,7 @@ fun VideoAttachmentBubble(attachment: Attachment) {
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = "Tap to play video",
+                    text = "Нажмите, чтобы воспроизвести",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                 )
@@ -776,7 +776,7 @@ fun DocumentAttachmentBubble(attachment: Attachment) {
                     context.startActivity(intent)
                 } catch (e: Exception) {
                     withContext(Dispatchers.Main) {
-                        android.widget.Toast.makeText(context, "Cannot open document: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                        android.widget.Toast.makeText(context, "Не удалось открыть документ: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
                     }
                 }
             }
@@ -788,7 +788,7 @@ fun DocumentAttachmentBubble(attachment: Attachment) {
         ) {
             Icon(
                 painter = painterResource(id = R.drawable.ic_translate),
-                contentDescription = "Open Document",
+                contentDescription = "Открыть документ",
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(32.dp)
             )
@@ -823,7 +823,7 @@ fun UserConversationItemPreview() {
         Column(modifier = Modifier.padding(16.dp)) {
             ConversationItem(
                 conversation = Conversation(
-                    text = "Hello! Can you help me?",
+                    text = "Привет! Поможешь мне?",
                     isMe = true,
                     category = Category.OTHER.name
                 ),
@@ -843,7 +843,7 @@ fun AiConversationItemPreview() {
         Column(modifier = Modifier.padding(16.dp)) {
             ConversationItem(
                 conversation = Conversation(
-                    text = "Sure! I can help you set an alarm or make a call.",
+                    text = "Конечно! Могу поставить будильник или позвонить.",
                     isMe = false,
                     category = Category.OTHER.name
                 ),
@@ -883,7 +883,7 @@ fun WeatherConversationItemPreview() {
         Column(modifier = Modifier.padding(16.dp)) {
             ConversationItem(
                 conversation = Conversation(
-                    text = "Today's weather is sunny, 25°C.",
+                    text = "Сегодня солнечно, 25°C.",
                     isMe = false,
                     category = Category.WEATHER.name
                 ),
