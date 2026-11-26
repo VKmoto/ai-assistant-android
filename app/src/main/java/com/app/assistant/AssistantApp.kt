@@ -22,7 +22,14 @@ class AssistantApp : Application() {
         super.onCreate()
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, error ->
-            runCatching { sendCrash(error) }
+            // Сеть на главном потоке Android запрещает (NetworkOnMainThreadException),
+            // поэтому отправка идёт в отдельном потоке, а здесь ждём её недолго: процесс
+            // всё равно завершится, но стек успевает уйти.
+            runCatching {
+                val sender = Thread { runCatching { sendCrash(error) } }
+                sender.start()
+                sender.join(3000)
+            }
             previous?.uncaughtException(thread, error)
         }
     }
@@ -38,7 +45,10 @@ class AssistantApp : Application() {
         error.printStackTrace(PrintWriter(sw))
         val payload = org.json.JSONObject()
             .put("reason", "crash")
-            .put("trace", sw.toString().take(12_000))
+            .put(
+                "trace",
+                (sw.toString() + "\n--- tts trace ---\n" + com.app.assistant.util.TtsTrace.dump()).take(16_000),
+            )
             .toString()
 
         val connection = URL(url).openConnection() as HttpURLConnection
