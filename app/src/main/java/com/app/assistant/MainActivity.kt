@@ -354,12 +354,21 @@ class MainActivity : ComponentActivity() {
     private fun resumeHandsFreeListening() {
         if (!viewModel.isHandsFreeModeActive.value) return
         if (viewModel.isListening.value || viewModel.isVoiceProcessing.value) return
+        // Ответ ещё стримится — это НЕ конец речи.
+        //
+        // Колбэк TTS сообщает isSpeaking=false после КАЖДОГО utterance, а ack
+        // («Секунду, уточняю.») — отдельный utterance: сразу после него старый код
+        // включал микрофон, и следующий SpeakText (сам ответ агента) отбрасывался
+        // проверкой «не слушаем» в handleUiEvent. В итоге ack и ошибки звучали, а
+        // ответ приходил только текстом (жалоба владельца 2026-11-26).
+        if (viewModel.chatList.any { it.isStreaming || it.isLoading }) return
         lifecycleScope.launch {
             delay(400)
             if (
                 viewModel.isHandsFreeModeActive.value &&
                 !viewModel.isListening.value &&
                 !viewModel.isVoiceProcessing.value &&
+                viewModel.chatList.none { it.isStreaming || it.isLoading } &&
                 !speechRecognizerManager.isListeningActive()
             ) {
                 startSpeechRecognition(isHandsFree = true)

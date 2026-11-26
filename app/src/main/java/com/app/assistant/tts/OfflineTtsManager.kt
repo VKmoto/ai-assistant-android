@@ -57,6 +57,22 @@ class OfflineTtsManager(
     private val modelManager = TtsModelManager(context)
 
     /**
+     * Запасной онлайн-голос: если Piper не смог синтезировать конкретное предложение
+     * (пустой результат или исключение в native), лучше прочитать его Edge TTS, чем
+     * оставить ответ беззвучным.
+     */
+    private var fallbackApi: EdgeTtsApiManager? = null
+
+    private fun speakViaFallback(text: String, voiceId: String) {
+        val engine = fallbackApi ?: EdgeTtsApiManager(
+            context,
+            settingsRepository,
+            com.app.assistant.viewmodel.MainViewModelFactory.okHttpClient,
+        ) {}.also { fallbackApi = it }
+        engine.speak(text, TtsManager.QUEUE_ADD, voiceId)
+    }
+
+    /**
      * Поднять движок для конкретного голоса.
      *
      * Piper-модели — это VITS: model.onnx + tokens.txt + espeak-ng-data (фонемизация
@@ -153,6 +169,10 @@ class OfflineTtsManager(
                     val floatSamples = audio.samples
                     val sampleRate = audio.sampleRate
 
+                    if (floatSamples.isEmpty()) {
+                        Log.w("OfflineTtsManager", "Empty audio for voice $voiceId, falling back to online TTS")
+                        speakViaFallback(cleanedText, voiceId)
+                    }
                     if (floatSamples.isNotEmpty()) {
                         val shortSamples = ShortArray(floatSamples.size)
                         for (i in floatSamples.indices) {
@@ -165,7 +185,8 @@ class OfflineTtsManager(
                 } catch (e: CancellationException) {
                     break
                 } catch (e: Exception) {
-                    Log.e("OfflineTtsManager", "Error generating speech", e)
+                    Log.e("OfflineTtsManager", "Error generating speech for voice $voiceId", e)
+                    speakViaFallback(cleanedText, voiceId)
                 }
 
                 if (speechQueue.isEmpty) {
@@ -395,6 +416,8 @@ class OfflineTtsManager(
     override fun shutdown() {
         job.cancel()
         stopPlaybackOnly()
+        fallbackApi?.shutdown()
+        fallbackApi = null
         try {
             runBlocking(ttsDispatcher) {
                 engines.values.forEach { runCatching { it.release() } }
