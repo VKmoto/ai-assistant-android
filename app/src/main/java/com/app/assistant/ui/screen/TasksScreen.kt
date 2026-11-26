@@ -1,5 +1,6 @@
 package com.app.assistant.ui.screen
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -120,7 +121,9 @@ fun TasksScreen(
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    // Фон обязателен: Activity прозрачная (edge-to-edge, как у чата), и без него
+    // сквозь экран задач просвечивала домашняя подложка (скриншоты владельца).
+    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         TopAppBar(
             title = { Text("Задачи") },
             navigationIcon = {
