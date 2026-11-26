@@ -779,6 +779,17 @@ class MainViewModel(
                         speakResponse(cleanText, queueMode)
                     }
                 }
+                // Автоматическая диагностика: журнал «текст → звук» уходит на шлюз, чтобы
+                // разбор «почему не озвучилось» не требовал ручного копирования с телефона.
+                // Небольшая задержка — чтобы в журнал попали и последние вызовы TTS.
+                viewModelScope.launch {
+                    kotlinx.coroutines.delay(1500)
+                    com.app.assistant.util.TtsDiagnosticsSender.send(
+                        com.app.assistant.viewmodel.MainViewModelFactory.okHttpClient,
+                        settingsRepository,
+                        "answer len=${fullResponse.length} speak=$speak",
+                    )
+                }
             }
         }
     }
