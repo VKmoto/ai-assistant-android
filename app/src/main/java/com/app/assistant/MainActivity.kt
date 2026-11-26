@@ -420,14 +420,18 @@ class MainActivity : ComponentActivity() {
                 override fun onBeginningOfSpeech() {
                     viewModel.setListening(true)
                     viewModel.setVoiceProcessing(false)
-                    // Первые 800 мс после старта микрофона — почти наверняка эхо
-                    // собственного ответа; глушить TTS в этот момент значит оборвать
-                    // фразу на первом слоге.
-                    val sinceStart = System.currentTimeMillis() - listeningStartedAt
-                    val likelyEcho = viewModel.isHandsFreeModeActive.value && sinceStart < 800
-                    if (textToSpeechManager.isSpeaking() && !likelyEcho) {
-                        com.app.assistant.util.TtsTrace.add("activity", "barge-in: stop TTS")
-                        textToSpeechManager.stop()
+                    // Озвучку НЕ останавливаем.
+                    //
+                    // Раньше любое «начало речи» глушило TTS (barge-in). В режиме
+                    // разговора микрофон слушает постоянно, поэтому шум, эхо из
+                    // динамика или прокрутка ленты обрывали чтение ответа (жалоба
+                    // владельца 2026-11-26: «при прокрутке чтение сбивается»).
+                    // Ответ должен дочитываться целиком; остановить можно кнопкой.
+                    if (textToSpeechManager.isSpeaking()) {
+                        com.app.assistant.util.TtsTrace.add(
+                            "activity",
+                            "speech while TTS speaks: ignored (barge-in disabled)",
+                        )
                     }
                 }
 

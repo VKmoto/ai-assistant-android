@@ -81,10 +81,26 @@ class EdgeTtsApiManager(
                 isGenerating = true
                 updateSpeakingState()
                 
-                try {
-                    ensureWebSocketConnected()
-                } catch (e: Exception) {
-                    Log.e("EdgeTtsApiManager", "Could not connect to WebSocket, skipping text: $text", e)
+                // Первый utterance приходит, когда WebSocket ещё поднимается (VPN,
+                // холодный старт). Одна повторная попытка вместо потери фразы:
+                // раньше ack молча пропадал именно так.
+                var connected = false
+                for (attempt in 1..2) {
+                    try {
+                        ensureWebSocketConnected()
+                        connected = true
+                        break
+                    } catch (e: Exception) {
+                        com.app.assistant.util.TtsTrace.add(
+                            "edge",
+                            "connect attempt $attempt failed: ${e.message}",
+                        )
+                        kotlinx.coroutines.delay(700)
+                    }
+                }
+                if (!connected) {
+                    Log.e("EdgeTtsApiManager", "Could not connect to WebSocket, skipping text: $text")
+                    com.app.assistant.util.TtsTrace.add("edge", "give up on len=${text.length}")
                     isGenerating = false
                     updateSpeakingState()
                     continue
@@ -93,6 +109,7 @@ class EdgeTtsApiManager(
                 idleTimeoutJob?.cancel()
 
                 val sentences = splitIntoSentences(text)
+                com.app.assistant.util.TtsTrace.add("edge", "synth voice=${VoiceCatalog.byId(item.voiceIdOverride ?: settingsRepository.voiceIdForText(text)).id} sentences=${sentences.size} len=${text.length}")
                 for (sentence in sentences) {
                     val cleaned = cleanTextForTts(sentence)
                     if (cleaned.isEmpty()) continue
