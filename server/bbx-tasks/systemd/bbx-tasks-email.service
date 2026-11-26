@@ -1,0 +1,8 @@
+[Unit]
+Description=Send queued task emails via bbx mail (metafeed)
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/bin/node /opt/bbx-tasks/scripts/email-dispatch.mjs

@@ -313,10 +313,11 @@ async function reminderTick(): Promise<void> {
             [chat.channel, chat.chatId, chat.chatType, text],
           );
         }
-        if (channel === "email" && chat) {
-          // TODO(этап 3): `bbx mail` (metafeed). Пока фиксируем намерение в журнале,
-          // чтобы не выдавать «отправлено» без подтверждения.
-          log({ event: "email-pending", task: reminder.task_id });
+        if (channel === "email") {
+          // Email — исключение из тихих часов (решение владельца), поэтому quiet здесь
+          // не проверяем. Саму отправку делает root-таймер (см. scripts/email-dispatch.mjs):
+          // у bbx нет доступа к metafeed CLI.
+          await store.enqueueEmail(`Напоминание: ${reminder.title}`, text);
         }
       }
       log({ event: "reminder-sent", id: reminder.id, quiet, channels: reminder.channels });

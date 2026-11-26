@@ -149,6 +149,17 @@ create table if not exists todo.agent_actions (
 );
 create index if not exists agent_actions_recent on todo.agent_actions(created_at desc);
 
+create table if not exists todo.email_outbox (
+  id bigserial primary key,
+  subject text not null,
+  body text not null,
+  status text not null default 'pending' check (status in ('pending','sent','failed')),
+  attempts int not null default 0,
+  error text,
+  created_at timestamptz not null default now(),
+  sent_at timestamptz
+);
+
 create table if not exists todo.audit (
   id bigserial primary key,
   actor text not null check (actor in ('user','agent','pipeline')),
@@ -400,6 +411,15 @@ export class Store {
       [limit],
     );
     return r.rows;
+  }
+
+  /**
+   * Email не отправляется из-под bbx: `bbx mail` использует metafeed, чей venv
+   * доступен только root. Поэтому сервис (пользователь bbx) кладёт письмо в очередь,
+   * а отдельный root-таймер забирает и отправляет, отмечая результат.
+   */
+  async enqueueEmail(subject: string, body: string): Promise<void> {
+    await this.pool.query("INSERT INTO todo.email_outbox (subject, body) VALUES ($1,$2)", [subject, body]);
   }
 
   async markReminderSent(id: string): Promise<void> {

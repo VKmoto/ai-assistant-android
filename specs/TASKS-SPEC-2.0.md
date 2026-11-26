@@ -274,8 +274,9 @@ POST /api/v1/inbox     {source, title, url?, text?, due_at?, filter:{is_task,con
   - **local** — приложение при открытии/по WorkManager забирает due-напоминания и показывает
     локальное уведомление; для точного времени — AlarmManager с `setExactAndAllowWhileIdle`.
   - **max / telegram** — модуль пишет `bbx.outbound_msg` (channel/chat_id владельца), доставляет роутер.
-  - **email** — включён по умолчанию: `bbx mail`, очередь metafeed и их cron. Это не мгновенный
-  канал: доставка в течение минут, поэтому для срочного дублируем локальным и MAX.
+  - **email** — включён по умолчанию. Сервис (bbx) кладёт письмо в `todo.email_outbox`,
+  root-таймер `bbx-tasks-email.timer` отправляет через `bbx mail` (очередь metafeed).
+  «Отправлено» = принято в очередь metafeed; это не мгновенный канал.
 - Тихие часы: 23:00–08:00 Europe/Moscow; «срочное» (priority=1 и due в пределах 2 ч)
   доставляется. **Email — исключение из тихих часов** (решение владельца 2026-11-26):
   письма уходят и ночью, чтобы к утру быть в ящике.

@@ -19,6 +19,13 @@ systemctl daemon-reload && systemctl enable --now bbx-tasks
 ln -sf /opt/bbx-tasks/dist/cli.js /usr/local/bin/tasks
 ```
 
+## Email
+
+Сервис работает под `bbx` и не имеет доступа к metafeed CLI. Поэтому email кладётся
+в `todo.email_outbox`, а root-таймер `bbx-tasks-email.timer` (каждые 2 минуты)
+отправляет его через `bbx mail`. «Отправлено» = принято в очередь metafeed
+(подтверждение их cron нам недоступно). Тихие часы на email не действуют.
+
 ## CLI (для агента-секретаря)
 
 ```
