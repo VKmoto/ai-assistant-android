@@ -1,7 +1,13 @@
 package com.app.assistant.tts
 
 interface TtsManager {
-    fun speak(text: String, queueMode: Int = QUEUE_FLUSH)
+    /**
+     * @param voiceIdOverride жёстко заданный голос (кнопка «Прослушать» в настройках).
+     *   null = выбрать по префиксу «[Имя]» из текста. Параметр добавлен, потому что
+     *   предпросмотр должен звучать выбранным голосом ещё до того, как он привязан к
+     *   агенту.
+     */
+    fun speak(text: String, queueMode: Int = QUEUE_FLUSH, voiceIdOverride: String? = null)
     fun stop()
     fun isSpeaking(): Boolean
     fun shutdown()

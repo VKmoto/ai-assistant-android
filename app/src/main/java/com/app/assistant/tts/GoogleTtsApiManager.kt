@@ -441,7 +441,7 @@ class GoogleTtsApiManager(
         }
     }
 
-    override fun speak(text: String, queueMode: Int) {
+    override fun speak(text: String, queueMode: Int, voiceIdOverride: String?) {
         scope.launch {
             if (queueMode == TtsManager.QUEUE_FLUSH) {
                 stopPlaybackOnly()

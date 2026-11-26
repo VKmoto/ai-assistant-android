@@ -24,7 +24,9 @@ class OfflineTtsManager(
     private val job = SupervisorJob()
     private val scope = CoroutineScope(ttsDispatcher + job)
     
-    private val speechQueue = Channel<String>(Channel.UNLIMITED)
+    private data class SpeechItem(val text: String, val voiceIdOverride: String?)
+
+    private val speechQueue = Channel<SpeechItem>(Channel.UNLIMITED)
     private val audioQueue = Channel<GeneratedAudio>(Channel.UNLIMITED)
     
     // Кэш движков по голосу: переключение между агентами не должно каждый раз
@@ -118,11 +120,12 @@ class OfflineTtsManager(
         }
 
         generatorJob = scope.launch {
-            for (text in speechQueue) {
+            for (item in speechQueue) {
+                val text = item.text
                 // Голос выбирается по префиксу «[Имя]», который ставит роутер: один чат —
                 // разные агенты — разные голоса. Нет модели этого голоса — пробуем голос
                 // по умолчанию, затем любой установленный, чтобы речь не пропала совсем.
-                val voiceId = settingsRepository.voiceIdForText(text)
+                val voiceId = item.voiceIdOverride ?: settingsRepository.voiceIdForText(text)
                 val tts = initTtsEngine(voiceId)
                     ?: modelManager.installedVoices().firstOrNull()?.let { initTtsEngine(it) }
                 if (tts == null) {
@@ -258,7 +261,7 @@ class OfflineTtsManager(
         }
     }
 
-    override fun speak(text: String, queueMode: Int) {
+    override fun speak(text: String, queueMode: Int, voiceIdOverride: String?) {
         scope.launch {
             if (queueMode == TtsManager.QUEUE_FLUSH) {
                 stopPlaybackOnly()
@@ -267,7 +270,7 @@ class OfflineTtsManager(
             for (sentence in sentences) {
                 val cleanedText = cleanTextForTts(sentence)
                 if (cleanedText.isNotEmpty()) {
-                    speechQueue.send(cleanedText)
+                    speechQueue.send(SpeechItem(cleanedText, voiceIdOverride))
                 }
             }
             updateSpeakingState()

@@ -72,7 +72,7 @@ class NativeTtsManager(
         }
     }
 
-    override fun speak(text: String, queueMode: Int) {
+    override fun speak(text: String, queueMode: Int, voiceIdOverride: String?) {
         val tts = textToSpeech
         if (tts == null) {
             Log.w("NativeTtsManager", "TTS is null")

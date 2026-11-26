@@ -47,13 +47,13 @@ class ApiTtsManager(
         onSpeakingStateChanged(isSpeaking)
     }
 
-    override fun speak(text: String, queueMode: Int) {
+    override fun speak(text: String, queueMode: Int, voiceIdOverride: String?) {
         // Stop the other manager to prevent overlapped audio if provider was changed dynamically
         when (activeProvider) {
             TtsApiProvider.EDGE_TTS -> googleTtsApiManager?.stop()
             TtsApiProvider.GOOGLE_TTS -> edgeTtsApiManager?.stop()
         }
-        currentManager.speak(text, queueMode)
+        currentManager.speak(text, queueMode, voiceIdOverride)
     }
 
     override fun stop() {

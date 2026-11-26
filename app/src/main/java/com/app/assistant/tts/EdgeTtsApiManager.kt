@@ -32,7 +32,9 @@ class EdgeTtsApiManager(
     private val job = SupervisorJob()
     private val scope = CoroutineScope(ttsDispatcher + job)
 
-    private val speechQueue = Channel<String>(Channel.UNLIMITED)
+    private data class SpeechItem(val text: String, val voiceIdOverride: String?)
+
+    private val speechQueue = Channel<SpeechItem>(Channel.UNLIMITED)
     private val streamChannel = Channel<SentenceStream>(Channel.UNLIMITED)
     
     private val activeStreams = ConcurrentHashMap<String, SentenceStream>()
@@ -74,7 +76,8 @@ class EdgeTtsApiManager(
         playbackJob?.cancel()
 
         generatorJob = scope.launch {
-            for (text in speechQueue) {
+            for (item in speechQueue) {
+                val text = item.text
                 isGenerating = true
                 updateSpeakingState()
                 
@@ -101,7 +104,7 @@ class EdgeTtsApiManager(
                     launchParser(stream)
                     
                     try {
-                        sendSsmlRequest(requestId, cleaned)
+                        sendSsmlRequest(requestId, cleaned, item.voiceIdOverride)
                         streamChannel.send(stream)
                         stream.completionDeferred.await()
                     } catch (e: Exception) {
@@ -179,6 +182,10 @@ class EdgeTtsApiManager(
                 var decodingActive = true
                 var hasMoreInput = true
                 var presentationTimeUs = 0L
+                // Сколько кадров записали — по нему ждём фактического проигрывания.
+                // Без этого stop()/flush() в finally обрезал последние ~150 мс фразы
+                // (жалоба владельца 2026-11-26: «конец ответа обрезался»).
+                var framesWritten = 0L
                 val frameIterator = stream.frameChannel.iterator()
 
                 while (decodingActive && coroutineContext.isActive) {
@@ -216,6 +223,7 @@ class EdgeTtsApiManager(
                             outputBuffer.get(pcmData)
                             outputBuffer.clear()
                             audioTrack.write(pcmData, 0, pcmData.size)
+                            framesWritten += pcmData.size / 2L
                         }
                         codec.releaseOutputBuffer(outputIndex, false)
 
@@ -230,8 +238,12 @@ class EdgeTtsApiManager(
                     }
                 }
 
-                if (coroutineContext.isActive) {
-                    delay(150)
+                // Доигрываем: ждём, пока позиция воспроизведения догонит записанное
+                // (не дольше 3 с — защита от зависания на кривом буфере).
+                val drainDeadline = System.currentTimeMillis() + 3000
+                while (coroutineContext.isActive && System.currentTimeMillis() < drainDeadline) {
+                    if (audioTrack.playbackHeadPosition >= framesWritten) break
+                    delay(10)
                 }
 
             } catch (e: Exception) {
@@ -449,7 +461,7 @@ class EdgeTtsApiManager(
         }
     }
 
-    private fun sendSsmlRequest(requestId: String, text: String) {
+    private fun sendSsmlRequest(requestId: String, text: String, voiceIdOverride: String? = null) {
         val ws = webSocket ?: return
         val dateStr = getFormattedDate()
         
@@ -463,7 +475,7 @@ class EdgeTtsApiManager(
         // Голос выбирается по агенту из префикса «[Имя]»: у Edge TTS русских голосов
         // всего два (Светлана/Дмитрий), поэтому женские офлайн-голоса идут на Светлану,
         // мужские — на Дмитрия; уникальность обеспечивает офлайн-режим.
-        val voice = VoiceCatalog.byId(settingsRepository.voiceIdForText(text))
+        val voice = VoiceCatalog.byId(voiceIdOverride ?: settingsRepository.voiceIdForText(text))
         val voiceName = voice.onlineVoice
         val langCode = if (voiceName.startsWith("ru-")) "ru-RU" else "en-US"
         val ssmlMsg = "X-RequestId:$requestId\r\n" +
@@ -612,12 +624,12 @@ class EdgeTtsApiManager(
         }
     }
 
-    override fun speak(text: String, queueMode: Int) {
+    override fun speak(text: String, queueMode: Int, voiceIdOverride: String?) {
         scope.launch {
             if (queueMode == TtsManager.QUEUE_FLUSH) {
                 stopPlaybackOnly()
             }
-            speechQueue.send(text)
+            speechQueue.send(SpeechItem(text, voiceIdOverride))
             updateSpeakingState()
         }
     }

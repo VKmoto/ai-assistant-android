@@ -26,7 +26,7 @@ class TtsEngineSelector(
         return apiTtsManager ?: ApiTtsManager(context, settingsRepository, okHttpClient, onSpeakingStateChanged).also { apiTtsManager = it }
     }
 
-    override fun speak(text: String, queueMode: Int) {
+    override fun speak(text: String, queueMode: Int, voiceIdOverride: String?) {
         val mode = settingsRepository.getTtsMode()
         
         if (queueMode == TtsManager.QUEUE_FLUSH) {
@@ -38,13 +38,13 @@ class TtsEngineSelector(
         when (mode) {
             TtsMode.OFFLINE -> {
                 if (isOfflineModelInstalled()) {
-                    getOfflineTtsManager().speak(text, queueMode)
+                    getOfflineTtsManager().speak(text, queueMode, voiceIdOverride)
                 } else {
-                    getNativeTtsManager().speak(text, queueMode)
+                    getNativeTtsManager().speak(text, queueMode, voiceIdOverride)
                 }
             }
             TtsMode.API -> {
-                getApiTtsManager().speak(text, queueMode)
+                getApiTtsManager().speak(text, queueMode, voiceIdOverride)
             }
             else -> {
                 getNativeTtsManager().speak(text, queueMode)

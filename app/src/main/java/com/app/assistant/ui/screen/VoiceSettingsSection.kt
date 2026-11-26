@@ -1,6 +1,8 @@
 package com.app.assistant.ui.screen
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -9,7 +11,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -38,6 +44,7 @@ import com.app.assistant.viewmodel.SettingsViewModel
  *   2) кто каким голосом говорит. Привязка хранится по имени агента и применяется по
  *      префиксу «[Имя]» в ответе — роутер ставит его сам, приложение ничего не угадывает.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun OfflineVoicesSection(settingsViewModel: SettingsViewModel) {
     val installed by settingsViewModel.installedVoices.collectAsState()
@@ -73,6 +80,12 @@ fun OfflineVoicesSection(settingsViewModel: SettingsViewModel) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+                IconButton(onClick = { settingsViewModel.previewVoice(voice.id) }) {
+                    Icon(
+                        imageVector = Icons.Filled.PlayArrow,
+                        contentDescription = "Прослушать голос ${voice.title}",
+                    )
+                }
                 if (isDownloading) {
                     CircularProgressIndicator(modifier = Modifier.size(28.dp))
                     Spacer(Modifier.width(8.dp))
@@ -99,7 +112,13 @@ fun OfflineVoicesSection(settingsViewModel: SettingsViewModel) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(6.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // FlowRow, а не Row: четыре чипа не помещаются в ширину экрана, и последний
+        // («Руслан») вылезал за край — на скриншоте владельца от него осталась полоска.
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
             VoiceCatalog.voices.forEach { voice ->
                 FilterChip(
                     selected = defaultVoice == voice.id,
@@ -146,6 +165,12 @@ private fun AgentVoiceRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(agentName, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+        IconButton(onClick = { settingsViewModel.previewVoice(current.id) }) {
+            Icon(
+                imageVector = Icons.Filled.PlayArrow,
+                contentDescription = "Прослушать голос агента $agentName",
+            )
+        }
         OutlinedButton(onClick = { expanded = true }) {
             Text("${current.title}${if (stored == null) " (по умолчанию)" else ""}")
         }
