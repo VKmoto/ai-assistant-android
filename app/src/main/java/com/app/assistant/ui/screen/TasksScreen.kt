@@ -2,13 +2,18 @@ package com.app.assistant.ui.screen
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -80,7 +85,7 @@ private val STATUS_COLUMNS = listOf(
     "done" to "Готово",
 )
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun TasksScreen(
     settingsRepository: SettingsRepository,
@@ -153,10 +158,11 @@ fun TasksScreen(
                 modifier = Modifier.padding(16.dp),
             )
         } else {
-            Row(
+            // FlowRow, а не Row: четыре чипа не помещаются в ширину экрана, и «Канбан»
+            // уезжал за край (на скриншоте от него осталась полоска).
+            FlowRow(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically,
             ) {
                 FilterChip(selected = !kanban && view == "inbox", onClick = { kanban = false; view = "inbox" }, label = { Text("Входящие") })
                 FilterChip(selected = !kanban && view == "today", onClick = { kanban = false; view = "today" }, label = { Text("Сегодня") })
@@ -187,7 +193,11 @@ fun TasksScreen(
 
     // Кнопка «+» обычная, а не FAB из Scaffold: тот же вид, но без subcompose-слота.
     if (ready) {
-        Box(modifier = Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.BottomEnd) {
+        // navigationBarsPadding: иначе кнопка «+» уезжает под системную навигацию.
+        Box(
+            modifier = Modifier.fillMaxSize().navigationBarsPadding().padding(16.dp),
+            contentAlignment = Alignment.BottomEnd,
+        ) {
             FloatingActionButton(onClick = {
                 newTitle = ""
                 newDue = ""
@@ -331,12 +341,18 @@ private fun TaskCard(task: TaskItem, onClick: () -> Unit) {
 
 @Composable
 private fun KanbanBoard(tasks: List<TaskItem>, onTaskClick: (TaskItem) -> Unit) {
-    Row(modifier = Modifier.fillMaxSize().padding(horizontal = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    // Четыре равные колонки на телефоне давали ~70 dp — текст рвался по буквам
+    // («Тест email-н апом...»). Колонки фиксированной ширины, канбан прокручивается
+    // по горизонтали — как в обычных канбан-досках.
+    Row(
+        modifier = Modifier.fillMaxSize().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         STATUS_COLUMNS.forEach { (status, label) ->
             val columnTasks = tasks.filter { it.status == status }
             Column(
                 modifier = Modifier
-                    .weight(1f)
+                    .width(260.dp)
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState()),
             ) {
