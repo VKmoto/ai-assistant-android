@@ -538,6 +538,9 @@ class MainViewModel(
         keyboardController: SoftwareKeyboardController? = null,
         speak: Boolean = false,
     ) {
+        // В режиме разговора ответ должен звучать, даже если вопрос набран с клавиатуры:
+        // иначе приложение молчит на текстовый ввод, хотя руки заняты, а режим включён.
+        val speakEnabled = speak || _isHandsFreeModeActive.value
         // Явно выбранный агент подставляется здесь, один раз и до очистки поля:
         // дальше текст живёт как обычное сообщение (в чате видно, кому адресовано).
         val originalQuestion = withSelectedAgent(question.value)
@@ -586,13 +589,13 @@ class MainViewModel(
 
             if (lockState != LockState.None && processChatCommandUseCase.isNegativeOrNotRequired(processedQuestion)) {
                 lockState = LockState.None
-                classifierHelper.classify(processedQuestion, itemId, loadingItemId, speak)
+                classifierHelper.classify(processedQuestion, itemId, loadingItemId, speakEnabled)
             } else {
                 when (val state = lockState) {
-                    is LockState.LockAlarm -> handleAlarmLockState(itemId, loadingItemId, speak, state)
-                    is LockState.LockReminder -> handleReminderLockState(itemId, loadingItemId, speak, state)
+                    is LockState.LockAlarm -> handleAlarmLockState(itemId, loadingItemId, speakEnabled, state)
+                    is LockState.LockReminder -> handleReminderLockState(itemId, loadingItemId, speakEnabled, state)
                     is LockState.LockNavigation -> TODO()
-                    is LockState.None -> classifierHelper.classify(processedQuestion, itemId, loadingItemId, speak)
+                    is LockState.None -> classifierHelper.classify(processedQuestion, itemId, loadingItemId, speakEnabled)
                 }
             }
         }
@@ -610,7 +613,7 @@ class MainViewModel(
     ) {
         viewModelScope.launch {
             val finalCategory = processChatCommandUseCase.resolveCategory(results, inputText)
-            callCommand(finalCategory.name, itemId, loadingItemId, speak)
+            callCommand(finalCategory.name, itemId, loadingItemId, speakEnabled)
 
             val index = chatList.indexOfFirst { it.id == itemId }
             if (index != -1) {

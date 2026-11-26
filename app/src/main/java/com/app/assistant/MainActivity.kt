@@ -298,9 +298,15 @@ class MainActivity : ComponentActivity() {
             }
 
             is UIEvent.SpeakText -> {
-                if (!viewModel.isListening.value && !viewModel.isVoiceProcessing.value) {
-                    textToSpeechManager.speak(event.text, event.queueMode)
-                }
+                // НЕ отбрасываем текст, если микрофон в этот момент слушает.
+                //
+                // Старая проверка «не слушаем и не обрабатываем голос» молча выбрасывала
+                // ответ агента: ack («Секунду, уточняю.») дочитывался, режим разговора
+                // успевал снова включить микрофон, и все последующие фразы (сам ответ)
+                // не озвучивались — слышны были только служебные реплики. Перебивание
+                // по-прежнему работает: когда человек начинает говорить, onBeginningOfSpeech
+                // останавливает TTS.
+                textToSpeechManager.speak(event.text, event.queueMode)
             }
 
             is UIEvent.StopSpeaking -> {

@@ -21,7 +21,12 @@ object OfflineTtsHolder {
         settingsRepository: SettingsRepository,
         onSpeakingStateChanged: (Boolean) -> Unit,
     ): OfflineTtsManager {
-        instance?.let { return it }
+        instance?.let { existing ->
+            // Экран настроек мог создать движок первым с пустым колбэком; основной
+            // экран обязан получать isSpeaking, иначе индикатор речи «залипает».
+            existing.onSpeakingStateChanged = onSpeakingStateChanged
+            return existing
+        }
         return synchronized(this) {
             instance ?: OfflineTtsManager(context, settingsRepository, onSpeakingStateChanged)
                 .also { instance = it }

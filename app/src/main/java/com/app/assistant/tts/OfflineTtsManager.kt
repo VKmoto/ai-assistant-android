@@ -17,7 +17,13 @@ import kotlin.coroutines.coroutineContext
 class OfflineTtsManager(
     private val context: Context,
     private val settingsRepository: SettingsRepository,
-    private val onSpeakingStateChanged: (isSpeaking: Boolean) -> Unit
+    /**
+     * Слушатель состояния — изменяемый, потому что движок один на приложение
+     * (OfflineTtsHolder), а экраны разные: основной экран должен получать isSpeaking
+     * даже если движок впервые создал экран настроек.
+     */
+    @Volatile
+    var onSpeakingStateChanged: (isSpeaking: Boolean) -> Unit
 ) : TtsManager {
 
     private val ttsDispatcher = newSingleThreadContext("OfflineTtsThread")
