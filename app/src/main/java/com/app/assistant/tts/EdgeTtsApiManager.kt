@@ -460,12 +460,15 @@ class EdgeTtsApiManager(
         ws.send(configMsg)
 
         val escapedText = escapeXml(text)
+        // Голос и язык SSML — по языку системы: иначе русский ответ читается
+        // английским голосом (Sonia), что звучит как иностранный акцент.
+        val (voiceName, langCode) = SpeechConfig.EdgeTts.voiceFor(java.util.Locale.getDefault())
         val ssmlMsg = "X-RequestId:$requestId\r\n" +
                 "Content-Type:application/ssml+xml\r\n" +
                 "X-Timestamp:$dateStr\r\n" +
                 "Path:ssml\r\n\r\n" +
-                "<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='en-US'>" +
-                "<voice name='${SpeechConfig.EdgeTts.VOICE}'>" +
+                "<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='$langCode'>" +
+                "<voice name='$voiceName'>" +
                 "<prosody pitch='+0Hz' rate='+0%' volume='+0%'>" +
                 escapedText +
                 "</prosody></voice></speak>"

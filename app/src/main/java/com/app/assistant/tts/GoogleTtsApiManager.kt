@@ -131,7 +131,7 @@ class GoogleTtsApiManager(
         }
         val url = "${SpeechConfig.GoogleTts.BASE_URL}?key=$apiKey"
         
-        val voiceName = SpeechConfig.GoogleTts.VOICE
+        val voiceName = SpeechConfig.GoogleTts.voiceFor(java.util.Locale.getDefault())
         val parts = voiceName.split("-")
         val languageCode = if (parts.size >= 2) "${parts[0]}-${parts[1]}" else "en-US"
 

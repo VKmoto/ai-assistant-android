@@ -178,8 +178,8 @@
     <!-- Speech to Text Settings -->
     <string name="stt_settings_title">Настройки распознавания речи</string>
     <string name="parakeet_model_title">Офлайн-модель NVIDIA Parakeet</string>
-    <string name="parakeet_model_desc">Модель NVIDIA Parakeet TDT 0.6B v2 очень точная, но тяжёлая (~660 МБ). Загрузка и использование займут время и место.</string>
-    <string name="status_installed">Статус: установлена (~660 МБ)</string>
+    <string name="parakeet_model_desc">Модель NVIDIA Parakeet TDT 0.6B v3 распознаёт речь на 25 языках, включая русский, и определяет язык сама. Тяжёлая (~640 МБ): загрузка и работа займут время и место.</string>
+    <string name="status_installed">Статус: установлена (~640 МБ)</string>
     <string name="delete_model">Удалить модель</string>
     <string name="status_not_downloaded">Статус: не загружена</string>
     <string name="download_model">Скачать модель</string>
@@ -190,7 +190,7 @@
     <string name="retry">Повторить</string>
     <string name="use_native_stt">Системное распознавание (быстро)</string>
     <string name="native_stt_desc">Использует встроенное распознавание речи системы. Быстро и легко.</string>
-    <string name="use_parakeet_stt">Только модель Parakeet (офлайн)</string>
+    <string name="use_parakeet_stt">Только модель Parakeet v3 (офлайн, 25 языков)</string>
     <string name="parakeet_stt_desc_enabled">Высокая точность, работа офлайн. При открытии микрофона возможен короткий «холодный старт».</string>
     <string name="parakeet_stt_desc_disabled">Высокая точность, работа офлайн. Сначала нужно скачать модель.</string>
     <string name="use_hybrid_stt">Гибридный режим (умное переключение)</string>

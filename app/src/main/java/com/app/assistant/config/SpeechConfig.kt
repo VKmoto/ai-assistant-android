@@ -28,14 +28,28 @@ object SpeechConfig {
             return if (key.isNullOrBlank()) BuildConfig.EDGE_TTS_SUBSCRIPTION_KEY else key
         }
         const val VOICE = "en-GB-SoniaNeural"
+        /**
+         * Русский голос. Английский Sonia читала русский текст с чудовищным акцентом
+         * (реальная жалоба владельца 2026-11-26), поэтому голос и язык SSML выбираются
+         * по языку системы: русская система — Светлана, иначе прежний Sonia.
+         */
+        const val VOICE_RU = "ru-RU-SvetlanaNeural"
         const val OUTPUT_FORMAT = "audio-24khz-48kbitrate-mono-mp3"
+
+        fun voiceFor(locale: java.util.Locale): Pair<String, String> =
+            if (locale.language == "ru") VOICE_RU to "ru-RU" else VOICE to "en-US"
     }
 
     // Google TTS Configurations
     object GoogleTts {
         const val BASE_URL = "https://texttospeech.googleapis.com/v1/text:synthesize"
         const val VOICE = "en-US-Wavenet-D"
+        /** Русский голос Google; languageCode выводится из имени (ru-RU). */
+        const val VOICE_RU = "ru-RU-Wavenet-D"
         const val AUDIO_ENCODING = "MP3"
+
+        fun voiceFor(locale: java.util.Locale): String =
+            if (locale.language == "ru") VOICE_RU else VOICE
         
         fun getApiKey(settingsRepository: SettingsRepository): String {
             return settingsRepository.getChatApiKey() ?: ""

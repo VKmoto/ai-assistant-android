@@ -16,6 +16,18 @@ class SpeechModelManager(private val context: Context) {
     private val modelDir = File(context.filesDir, "sherpa-onnx")
     private val markerFile = File(modelDir, ".installed")
 
+    /**
+     * Версия модели в локальных файлах.
+     *
+     * v2 (parakeet-tdt-0.6b-v2) — АНГЛИЙСКАЯ модель: русскую речь она расшифровывает
+     * английскими буквами, и переключение языка в настройках тут не помогает. v3 —
+     * та же архитектура (encoder/decoder/joiner, nemo_transducer), но обучена на 25
+     * языках, включая русский, и язык определяет сама. Версия входит в marker-файл,
+     * потому что имена файлов совпадают: без неё приложение увидело бы старые v2-файлы
+     * и молча продолжало распознавать по-английски.
+     */
+    private val modelVersion = "v3"
+
     data class ModelFileDesc(
         val url: String,
         val localName: String
@@ -23,19 +35,19 @@ class SpeechModelManager(private val context: Context) {
 
     private val modelFiles = listOf(
         ModelFileDesc(
-            url = "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8/resolve/main/encoder.int8.onnx",
+            url = "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/resolve/main/encoder.int8.onnx",
             localName = "parakeet-encoder.onnx"
         ),
         ModelFileDesc(
-            url = "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8/resolve/main/decoder.int8.onnx",
+            url = "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/resolve/main/decoder.int8.onnx",
             localName = "parakeet-decoder.onnx"
         ),
         ModelFileDesc(
-            url = "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8/resolve/main/joiner.int8.onnx",
+            url = "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/resolve/main/joiner.int8.onnx",
             localName = "parakeet-joiner.onnx"
         ),
         ModelFileDesc(
-            url = "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8/resolve/main/tokens.txt",
+            url = "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/resolve/main/tokens.txt",
             localName = "parakeet-tokens.txt"
         ),
         ModelFileDesc(
@@ -58,23 +70,17 @@ class SpeechModelManager(private val context: Context) {
         }
         if (!allFilesExistAndNonEmpty) return false
 
-        // If marker file exists, model is fully and reliably downloaded
-        if (markerFile.exists()) return true
-
-        // Backward compatibility / migration:
-        // If files already exist with substantial size (encoder > 100 MB), auto-create marker file
-        val encoder = File(modelDir, "parakeet-encoder.onnx")
-        if (encoder.length() > 100 * 1024 * 1024L) {
-            try {
-                markerFile.writeText("version=1\ntimestamp=${System.currentTimeMillis()}\n")
-                return true
-            } catch (e: Exception) {
-                Log.w("SpeechModelManager", "Could not write .installed marker file", e)
-                return true
-            }
+        // Маркер без версии (или с чужой версией) означает старую модель: файлы могут
+        // существовать, но это v2, и распознавание будет английским. Тогда честно
+        // отвечаем «не скачана», и приложение предлагает загрузить v3.
+        if (!markerFile.exists()) return false
+        val marker = try {
+            markerFile.readText()
+        } catch (e: Exception) {
+            Log.w("SpeechModelManager", "Could not read .installed marker file", e)
+            return false
         }
-
-        return false
+        return marker.contains("version=$modelVersion")
     }
 
     fun deleteLocalModel(): Boolean {
@@ -113,6 +119,15 @@ class SpeechModelManager(private val context: Context) {
         withContext(Dispatchers.IO) {
             try {
                 if (!modelDir.exists()) {
+                    modelDir.mkdirs()
+                }
+                // Старая (v2) модель на диске: имена файлов те же, поэтому без очистки
+                // загрузка «пропустила» бы их как уже готовые и просто поставила новый
+                // маркер — приложение считало бы v3 установленной, распознавая по-английски.
+                val markerSaysCurrent = markerFile.exists() && runCatching { markerFile.readText() }
+                    .getOrDefault("").contains("version=$modelVersion")
+                if (!markerSaysCurrent && modelDir.exists()) {
+                    deleteLocalModel()
                     modelDir.mkdirs()
                 }
 
@@ -208,7 +223,7 @@ class SpeechModelManager(private val context: Context) {
                 }
 
                 // All files successfully downloaded: write marker file
-                markerFile.writeText("version=1\ntimestamp=${System.currentTimeMillis()}\n")
+                markerFile.writeText("version=$modelVersion\ntimestamp=${System.currentTimeMillis()}\n")
 
                 currentCall = null
                 onComplete(true, null)
