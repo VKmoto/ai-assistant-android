@@ -323,5 +323,24 @@ class SettingsRepository(
     fun setSelectedAgent(agentName: String) {
         sharedPreferences.edit().putString("selected_agent", agentName).apply()
     }
+
+    // ---- таск-менеджер (bbx-tasks) -----------------------------------------
+    // URL и device-токен вводятся в самом экране «Задачи»: это отдельная интеграция,
+    // и держать её в общих настройках рядом с LLM-ключом было бы путаницей.
+    fun getTasksUrl(): String = sharedPreferences.getString("tasks_url", "") ?: ""
+
+    fun setTasksUrl(url: String) {
+        sharedPreferences.edit().putString("tasks_url", url.trim()).apply()
+    }
+
+    fun getTasksToken(): String = try {
+        securedPreferences.getString("tasks_token", "") ?: ""
+    } catch (e: Exception) {
+        ""
+    }
+
+    fun setTasksToken(token: String) {
+        securedPreferences.edit().putString("tasks_token", token.trim()).apply()
+    }
 }
 

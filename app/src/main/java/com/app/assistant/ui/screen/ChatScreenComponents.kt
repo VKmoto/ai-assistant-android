@@ -131,6 +131,7 @@ fun ChatDrawerContent(
     isDeletingChat: Boolean,
     onGroupClick: (Long) -> Unit,
     onSettingsClick: () -> Unit,
+    onTasksClick: () -> Unit = {},
     onNewChatClick: () -> Unit,
     onDeleteGroupClick: (Long) -> Unit,
 ) {
@@ -169,6 +170,23 @@ fun ChatDrawerContent(
             }
         }
         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+        // Задачи — часть приложения, поэтому пункт стоит рядом с настройками, а не
+        // отдельной иконкой на экране чата.
+        NavigationDrawerItem(
+            label = { Text(text = "Задачи") },
+            icon = {
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_live_modes),
+                    contentDescription = "Задачи",
+                )
+            },
+            selected = false,
+            onClick = {
+                if (!isDeletingChat) {
+                    onTasksClick()
+                }
+            },
+        )
         NavigationDrawerItem(
             label = { Text(text = stringResource(id = R.string.settings_title)) },
             icon = {

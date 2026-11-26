@@ -199,6 +199,11 @@ fun SetupUI(
                     settingsViewModel.updateActiveLanguageCode(langCode)
                 }
             )
+        } else if (currentScreen == "tasks") {
+            TasksScreen(
+                settingsRepository = viewModel.settingsRepository,
+                onBack = { currentScreen = "chat" },
+            )
         } else {
             ChatScreenContent(
                 isCustomUI = isCustomUI,
@@ -216,6 +221,7 @@ fun SetupUI(
                 onDeleteGroupClick = { viewModel.deleteGroup(it) },
                 onGroupClick = { viewModel.loadMessagesFromGroup(it) },
                 onSettingsClick = { currentScreen = "settings" },
+                onTasksClick = { currentScreen = "tasks" },
                 onNewChatClick = { viewModel.newChat() },
                 onCopyClick = { index ->
                     val conversation = viewModel.chatList.getOrNull(index)
@@ -287,6 +293,7 @@ fun ChatScreenContent(
     isDeletingChat: Boolean,
     onGroupClick: (Long) -> Unit,
     onSettingsClick: () -> Unit,
+    onTasksClick: () -> Unit = {},
     onNewChatClick: () -> Unit,
     onCopyClick: (Int) -> Unit,
     onDeleteClick: (Int) -> Unit,
@@ -343,6 +350,10 @@ fun ChatScreenContent(
                     isDeletingChat = isDeletingChat,
                     onGroupClick = { groupId ->
                         onGroupClick(groupId)
+                        scope.launch { drawerState.close() }
+                    },
+                    onTasksClick = {
+                        onTasksClick()
                         scope.launch { drawerState.close() }
                     },
                     onSettingsClick = {
