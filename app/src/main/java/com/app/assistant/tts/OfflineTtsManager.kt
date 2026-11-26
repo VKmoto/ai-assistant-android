@@ -252,7 +252,12 @@ class OfflineTtsManager(
                     }
 
                     // Write short samples to stream track
+                    val startedWrite = System.currentTimeMillis()
                     activeTrack.write(audio.samples, 0, audio.samples.size, AudioTrack.WRITE_BLOCKING)
+                    com.app.assistant.util.TtsTrace.add(
+                        "offline",
+                        "play samples=${audio.samples.size} rate=$currentSampleRate write_ms=${System.currentTimeMillis() - startedWrite}",
+                    )
 
                     // If there is no more audio in the queue, and we are not generating more,
                     // we wait for the current audio block to finish playing before releasing the track.
@@ -263,6 +268,7 @@ class OfflineTtsManager(
                         // Check again to ensure no new audio arrived during the delay
                         if (audioQueue.isEmpty && !isGenerating && speechQueue.isEmpty) {
                             try {
+                                com.app.assistant.util.TtsTrace.add("offline", "track stop after drain")
                                 activeTrack.stop()
                                 activeTrack.release()
                             } catch (e: Exception) {}

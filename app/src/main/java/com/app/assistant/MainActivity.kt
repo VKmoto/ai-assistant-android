@@ -80,6 +80,12 @@ class MainActivity : ComponentActivity() {
      * включение режима разговора там было бы сюрпризом.
      */
     private var assistantLaunchHandled = false
+    /**
+     * Когда микрофон стартовал. Нужен, чтобы отличить эхо собственного голоса ассистента
+     * (микрофон открылся, динамик ещё говорит) от настоящего перебивания: в первом случае
+     * TTS глушить нельзя, иначе ответ обрывается на первом слоге.
+     */
+    private var listeningStartedAt = 0L
     private var activeCollectionJob: kotlinx.coroutines.Job? = null
 
     private val screenCaptureLauncher = registerForActivityResult(
@@ -384,6 +390,13 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startSpeechRecognition(isHandsFree: Boolean = false) {
+        // Пока TTS говорит, новый цикл слушания не начинаем: иначе микрофон ловит
+        // собственный голос и обрывает озвучку (симптом «Сек..» вместо «Секунду, уточняю»).
+        if (isHandsFree && textToSpeechManager.isSpeaking()) {
+            com.app.assistant.util.TtsTrace.add("activity", "startListening skipped: TTS is speaking")
+            return
+        }
+        listeningStartedAt = System.currentTimeMillis()
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), 101)
             return
@@ -407,7 +420,13 @@ class MainActivity : ComponentActivity() {
                 override fun onBeginningOfSpeech() {
                     viewModel.setListening(true)
                     viewModel.setVoiceProcessing(false)
-                    if (textToSpeechManager.isSpeaking()) {
+                    // Первые 800 мс после старта микрофона — почти наверняка эхо
+                    // собственного ответа; глушить TTS в этот момент значит оборвать
+                    // фразу на первом слоге.
+                    val sinceStart = System.currentTimeMillis() - listeningStartedAt
+                    val likelyEcho = viewModel.isHandsFreeModeActive.value && sinceStart < 800
+                    if (textToSpeechManager.isSpeaking() && !likelyEcho) {
+                        com.app.assistant.util.TtsTrace.add("activity", "barge-in: stop TTS")
                         textToSpeechManager.stop()
                     }
                 }
