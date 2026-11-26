@@ -269,6 +269,13 @@ class SettingsRepository(
             .apply()
     }
 
+    /** Явно выбранный агент для новых сообщений; "" = авто (по имени в тексте). */
+    fun getSelectedAgent(): String = sharedPreferences.getString("selected_agent", "") ?: ""
+
+    fun setSelectedAgent(agentName: String) {
+        sharedPreferences.edit().putString("selected_agent", agentName).apply()
+    }
+
     /** Все привязки «агент -> голос» для настроек. */
     fun getAgentVoices(): Map<String, String> =
         getKnownAgentNames().mapNotNull { name -> getAgentVoice(name)?.let { name to it } }.toMap()

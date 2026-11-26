@@ -122,6 +122,8 @@ fun SetupUI(
         val isVoiceProcessing by viewModel.isVoiceProcessing.collectAsState()
         val isHandsFree by viewModel.isHandsFreeModeActive.collectAsState()
         val isMicMuted by viewModel.isMicMuted.collectAsState()
+        val selectedAgent by viewModel.selectedAgent.collectAsState()
+        val knownAgents by settingsViewModel.agentVoiceNames.collectAsState()
         val question by viewModel.question.collectAsState()
         val isTranslationEnabled by settingsViewModel.isTranslationEnabled.collectAsState()
         val isDeletingChat by viewModel.isDeletingChat.collectAsState()
@@ -261,7 +263,10 @@ fun SetupUI(
                 isVisionModeActive = isVisionModeActive,
                 onToggleVisionMode = onToggleVisionMode,
                 isScreenModeActive = isScreenModeActive,
-                onToggleScreenMode = onToggleScreenMode
+                onToggleScreenMode = onToggleScreenMode,
+                selectedAgent = selectedAgent,
+                agentNames = knownAgents,
+                onSelectAgent = { viewModel.setSelectedAgent(it) }
             )
         }
     }
@@ -311,6 +316,9 @@ fun ChatScreenContent(
     onToggleVisionMode: () -> Unit = {},
     isScreenModeActive: Boolean = false,
     onToggleScreenMode: () -> Unit = {},
+    selectedAgent: String = "",
+    agentNames: List<String> = emptyList(),
+    onSelectAgent: (String) -> Unit = {},
 ) {
     var showCopyIcon by remember { mutableStateOf(false) }
     var selectedItemIndex by remember { mutableStateOf<Int?>(null) }
@@ -434,6 +442,9 @@ fun ChatScreenContent(
                     onToggleVisionMode = onToggleVisionMode,
                     isScreenModeActive = isScreenModeActive,
                     onToggleScreenMode = onToggleScreenMode,
+                    selectedAgent = selectedAgent,
+                    agentNames = agentNames,
+                    onSelectAgent = onSelectAgent,
                 )
             }
         }

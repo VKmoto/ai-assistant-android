@@ -38,6 +38,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -95,6 +96,10 @@ fun UserInputField(
     isHandsFree: Boolean = false,
     onToggleHandsFree: () -> Unit = {},
     hasMessages: Boolean = false,
+    /** Явно выбранный агент ("" = авто). См. MainViewModel.selectedAgent. */
+    selectedAgent: String = "",
+    agentNames: List<String> = emptyList(),
+    onSelectAgent: (String) -> Unit = {},
 ) {
     val containerColor = TextFieldDefaults.colors().unfocusedContainerColor
     val rippleColor = adjustContrast(containerColor)
@@ -167,76 +172,42 @@ fun UserInputField(
                     unfocusedIndicatorColor = Color.Transparent,
                     disabledIndicatorColor = Color.Transparent,
                 ),
-                leadingIcon = if ((isImageSupported || isAudioSupported || isVideoSupported || isDocumentSupported) && !isSpeaking) {
-                    {
-                        var menuExpanded by remember { mutableStateOf(false) }
-                        Box {
-                            IconButton(onClick = { menuExpanded = true }) {
-                                Icon(
-                                    painter = painterResource(id = R.drawable.ic_attachment),
-                                    contentDescription = "Прикрепить файл",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            DropdownMenu(
-                                expanded = menuExpanded,
-                                onDismissRequest = { menuExpanded = false }
-                            ) {
-                                if (isImageSupported) {
-                                    DropdownMenuItem(
-                                        text = { Text("Изображение") },
-                                        onClick = {
-                                            menuExpanded = false
-                                            onAttachClick("image/*")
-                                        }
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("Сделать фото (камера)") },
-                                        onClick = {
-                                            menuExpanded = false
-                                            onAttachClick("camera")
-                                        }
-                                    )
-                                }
-                                if (isAudioSupported) {
-                                    DropdownMenuItem(
-                                        text = { Text("Аудио") },
-                                        onClick = {
-                                            menuExpanded = false
-                                            onAttachClick("audio/*")
-                                        }
-                                    )
-                                }
-                                if (isVideoSupported) {
-                                    DropdownMenuItem(
-                                        text = { Text("Видео") },
-                                        onClick = {
-                                            menuExpanded = false
-                                            onAttachClick("video/*")
-                                        }
-                                    )
-                                }
-                                if (isDocumentSupported) {
-                                    DropdownMenuItem(
-                                        text = { Text("Документ (PDF)") },
-                                        onClick = {
-                                            menuExpanded = false
-                                            onAttachClick("application/pdf")
-                                        }
-                                    )
-                                }
-                                // Always support text files as they are decrypted and appended inline as text
+                // Вместо прикрепления файла (владелец попросил убрать) — явный выбор
+                // агента: голосом имя распознаётся неверно, а выбор подставляет его
+                // текстом, и маршрутизация перестаёт зависеть от STT.
+                leadingIcon = {
+                    var agentMenuExpanded by remember { mutableStateOf(false) }
+                    Box {
+                        TextButton(onClick = { agentMenuExpanded = true }) {
+                            Text(
+                                text = selectedAgent.ifBlank { "Авто" },
+                                style = MaterialTheme.typography.labelMedium,
+                                maxLines = 1,
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = agentMenuExpanded,
+                            onDismissRequest = { agentMenuExpanded = false },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Авто (по имени в тексте)") },
+                                onClick = {
+                                    agentMenuExpanded = false
+                                    onSelectAgent("")
+                                },
+                            )
+                            agentNames.forEach { name ->
                                 DropdownMenuItem(
-                                    text = { Text("Текстовый файл (.txt/.csv/.json)") },
+                                    text = { Text(name) },
                                     onClick = {
-                                        menuExpanded = false
-                                        onAttachClick("text/*")
-                                    }
+                                        agentMenuExpanded = false
+                                        onSelectAgent(name)
+                                    },
                                 )
                             }
                         }
                     }
-                } else null,
+                },
                 trailingIcon = {
                     val hasInput = question.isNotEmpty() || selectedAttachments.isNotEmpty()
                     val showSendButton = hasInput || isListening || hasMessages

@@ -266,32 +266,6 @@ fun HandsFreeBar(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        // Left actions: Camera and Share Screen
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            IconButton(
-                onClick = onToggleVisionMode
-            ) {
-                Icon(
-                    painter = painterResource(id = R.drawable.ic_camera),
-                    contentDescription = "Камера (режим разговора)",
-                    tint = if (isVisionModeActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            IconButton(
-                onClick = onToggleScreenMode
-            ) {
-                Icon(
-                    painter = painterResource(id = R.drawable.ic_screen_share),
-                    contentDescription = "Показ экрана (режим разговора)",
-                    tint = if (isScreenModeActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-
         // Center State Orb
         Box(
             modifier = Modifier.weight(1f),

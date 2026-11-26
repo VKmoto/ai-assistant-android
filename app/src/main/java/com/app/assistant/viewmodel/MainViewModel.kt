@@ -327,6 +327,31 @@ class MainViewModel(
     private val _isMicReady = MutableStateFlow(false)
     val isMicReady: StateFlow<Boolean> = _isMicReady.asStateFlow()
 
+    /**
+     * Явно выбранный агент для новых сообщений ("" = авто).
+     *
+     * Зачем: голосом имя агента распознаётся неверно («Масяня» → «Васяня»), и сообщение
+     * уходит не тому. Выбор в строке отправки подставляет имя текстом, поэтому STT
+     * больше не участвует в маршрутизации. Если в тексте уже есть известное имя, ничего
+     * не добавляем — сказанное вслух важнее.
+     */
+    private val _selectedAgent = MutableStateFlow(settingsRepository.getSelectedAgent())
+    val selectedAgent: StateFlow<String> = _selectedAgent.asStateFlow()
+
+    fun setSelectedAgent(agentName: String) {
+        _selectedAgent.value = agentName
+        settingsRepository.setSelectedAgent(agentName)
+    }
+
+    private fun withSelectedAgent(text: String): String {
+        val agent = _selectedAgent.value.trim()
+        if (agent.isEmpty() || text.isBlank()) return text
+        val known = settingsRepository.getKnownAgentNames().map { it.lowercase() }
+        val first = text.trim().split(Regex("[\\s,.!?…]+"), limit = 2).firstOrNull()?.lowercase()
+        if (first != null && known.contains(first)) return text
+        return "$agent, $text"
+    }
+
     private val _isMicMuted = MutableStateFlow(false)
     val isMicMuted: StateFlow<Boolean> = _isMicMuted.asStateFlow()
 
@@ -513,7 +538,9 @@ class MainViewModel(
         keyboardController: SoftwareKeyboardController? = null,
         speak: Boolean = false,
     ) {
-        val originalQuestion = question.value
+        // Явно выбранный агент подставляется здесь, один раз и до очистки поля:
+        // дальше текст живёт как обычное сообщение (в чате видно, кому адресовано).
+        val originalQuestion = withSelectedAgent(question.value)
         val currentAttachments = _selectedAttachments.value
         _selectedAttachments.value = emptyList()
 
@@ -883,7 +910,7 @@ class MainViewModel(
     }
 
     fun onSpeechRecognized(recognizedText: String) {
-        _question.value = recognizedText
+        _question.value = withSelectedAgent(recognizedText)
         if (recognizedText.isNotBlank()) {
             processQuestion(speak = true)
         }

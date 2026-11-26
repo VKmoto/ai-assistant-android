@@ -312,18 +312,19 @@ class SettingsViewModel(
     // Кнопка «Прослушать» должна звучать ровно тем голосом, который выбран, ещё до
     // привязки к агенту. Поэтому здесь отдельные ленивые движки, а голос передаётся
     // параметром voiceIdOverride (обычный speak выбирает голос по префиксу «[Имя]»).
-    private var previewOffline: com.app.assistant.tts.OfflineTtsManager? = null
+
     private var previewEdge: com.app.assistant.tts.EdgeTtsApiManager? = null
 
     fun previewVoice(voiceId: String) {
         val voice = com.app.assistant.tts.VoiceCatalog.byId(voiceId)
         val text = "Привет! Меня зовут ${voice.title}. Так я буду говорить."
         if (ttsModelManager.isModelDownloaded(voiceId)) {
-            val engine = previewOffline ?: com.app.assistant.tts.OfflineTtsManager(
+            // Тот же движок, что и на основном экране (OfflineTtsHolder): превью не
+            // должно создавать второй native-контекст на ту же модель.
+            com.app.assistant.tts.OfflineTtsHolder.get(
                 settingsRepository.context,
                 settingsRepository,
-            ) {}.also { previewOffline = it }
-            engine.speak(text, com.app.assistant.tts.TtsManager.QUEUE_FLUSH, voiceId)
+            ) {}.speak(text, com.app.assistant.tts.TtsManager.QUEUE_FLUSH, voiceId)
         } else {
             // Голос не скачан: показываем, как он звучал бы онлайн (Светлана/Дмитрий).
             val engine = previewEdge ?: com.app.assistant.tts.EdgeTtsApiManager(
@@ -337,7 +338,7 @@ class SettingsViewModel(
 
     override fun onCleared() {
         super.onCleared()
-        previewOffline?.shutdown()
+        com.app.assistant.tts.OfflineTtsHolder.shutdown()
         previewEdge?.shutdown()
     }
 

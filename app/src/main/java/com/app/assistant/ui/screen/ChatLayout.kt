@@ -94,6 +94,9 @@ fun ChatLayout(
     onToggleVisionMode: () -> Unit = {},
     isScreenModeActive: Boolean = false,
     onToggleScreenMode: () -> Unit = {},
+    selectedAgent: String = "",
+    agentNames: List<String> = emptyList(),
+    onSelectAgent: (String) -> Unit = {},
 ) {
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
@@ -371,6 +374,9 @@ fun ChatLayout(
                             isHandsFree = isHandsFree,
                             onToggleHandsFree = onToggleHandsFree,
                             hasMessages = chatList.isNotEmpty(),
+                            selectedAgent = selectedAgent,
+                            agentNames = agentNames,
+                            onSelectAgent = onSelectAgent,
                         )
                     }
                 }

@@ -19,7 +19,9 @@ class TtsEngineSelector(
     }
 
     private fun getOfflineTtsManager(): OfflineTtsManager {
-        return offlineTtsManager ?: OfflineTtsManager(context, settingsRepository, onSpeakingStateChanged).also { offlineTtsManager = it }
+        // Общий экземпляр с экраном настроек: второй native-движок на ту же модель
+        // ломал инициализацию основного (см. OfflineTtsHolder).
+        return OfflineTtsHolder.get(context, settingsRepository, onSpeakingStateChanged)
     }
 
     private fun getApiTtsManager(): ApiTtsManager {
