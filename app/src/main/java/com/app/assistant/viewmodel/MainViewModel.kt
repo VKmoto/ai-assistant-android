@@ -613,7 +613,7 @@ class MainViewModel(
     ) {
         viewModelScope.launch {
             val finalCategory = processChatCommandUseCase.resolveCategory(results, inputText)
-            callCommand(finalCategory.name, itemId, loadingItemId, speakEnabled)
+            callCommand(finalCategory.name, itemId, loadingItemId, speak)
 
             val index = chatList.indexOfFirst { it.id == itemId }
             if (index != -1) {
