@@ -9,13 +9,13 @@ package com.app.assistant.util
  */
 object TtsTrace {
     private const val MAX = 300
-    private val lines = ArrayDeque<String>()
+    private val lines = mutableListOf<String>()
 
     @Synchronized
     fun add(tag: String, message: String) {
         val line = "${System.currentTimeMillis() % 1_000_000} $tag: $message"
-        lines.addLast(line)
-        while (lines.size > MAX) lines.removeFirst()
+        lines.add(line)
+        while (lines.size > MAX) lines.removeAt(0)
         android.util.Log.d("TtsTrace", line)
     }
 
