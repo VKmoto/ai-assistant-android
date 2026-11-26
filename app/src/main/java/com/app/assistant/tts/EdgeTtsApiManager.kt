@@ -59,6 +59,27 @@ class EdgeTtsApiManager(
     @Volatile
     private var isPlaying = false
 
+    /**
+     * Голос текущего ОТВЕТА.
+     *
+     * Префикс «[Имя]» есть только в первом предложении: последующие приходят без него,
+     * и голос сбрасывался на дефолт — ответ Дока начинался Дмитрием и продолжался
+     * Светланой (жалоба владельца 2026-11-26). Фиксируем голос на весь ответ и сбрасываем
+     * при новом запросе (QUEUE_FLUSH).
+     */
+    private var responseVoiceId: String? = null
+
+    private fun resolveResponseVoice(item: SpeechItem): String {
+        item.voiceIdOverride?.let { responseVoiceId = it; return it }
+        val name = com.app.assistant.tts.VoiceResolver.agentName(item.text)
+        if (name != null) {
+            val id = settingsRepository.voiceIdForText(item.text, TtsEngine.EDGE)
+            responseVoiceId = id
+            return id
+        }
+        return responseVoiceId ?: settingsRepository.getDefaultVoice(TtsEngine.EDGE)
+    }
+
     private class SentenceStream(
         val requestId: String,
         val rawDataChannel: Channel<ByteArray> = Channel(Channel.UNLIMITED),
@@ -109,10 +130,10 @@ class EdgeTtsApiManager(
                 idleTimeoutJob?.cancel()
 
                 val sentences = splitIntoSentences(text)
+                val voiceId = resolveResponseVoice(item)
                 com.app.assistant.util.TtsTrace.add(
                     "edge",
-                    "synth voice=${item.voiceIdOverride ?: settingsRepository.voiceIdForText(text, TtsEngine.EDGE)} " +
-                        "sentences=${sentences.size} len=${text.length}",
+                    "synth voice=$voiceId sentences=${sentences.size} len=${text.length}",
                 )
                 for (sentence in sentences) {
                     val cleaned = cleanTextForTts(sentence)
@@ -125,7 +146,7 @@ class EdgeTtsApiManager(
                     launchParser(stream)
                     
                     try {
-                        sendSsmlRequest(requestId, cleaned, item.voiceIdOverride)
+                        sendSsmlRequest(requestId, cleaned, voiceId)
                         streamChannel.send(stream)
                         stream.completionDeferred.await()
                     } catch (e: Exception) {
@@ -649,6 +670,7 @@ class EdgeTtsApiManager(
     override fun speak(text: String, queueMode: Int, voiceIdOverride: String?) {
         scope.launch {
             if (queueMode == TtsManager.QUEUE_FLUSH) {
+                responseVoiceId = null
                 stopPlaybackOnly()
             }
             speechQueue.send(SpeechItem(text, voiceIdOverride))

@@ -69,6 +69,20 @@ class OfflineTtsManager(
      */
     private var fallbackApi: EdgeTtsApiManager? = null
 
+    /** Голос текущего ответа: префикс «[Имя]» есть только в первом предложении. */
+    private var responseVoiceId: String? = null
+
+    private fun resolveResponseVoice(item: SpeechItem): String {
+        item.voiceIdOverride?.let { responseVoiceId = it; return it }
+        val name = VoiceResolver.agentName(item.text)
+        if (name != null) {
+            val id = settingsRepository.voiceIdForText(item.text, TtsEngine.PIPER)
+            responseVoiceId = id
+            return id
+        }
+        return responseVoiceId ?: settingsRepository.getDefaultVoice(TtsEngine.PIPER)
+    }
+
     private fun speakViaFallback(text: String, voiceId: String) {
         val engine = fallbackApi ?: EdgeTtsApiManager(
             context,
@@ -156,7 +170,7 @@ class OfflineTtsManager(
                 // Голос выбирается по префиксу «[Имя]», который ставит роутер: один чат —
                 // разные агенты — разные голоса. Нет модели этого голоса — пробуем голос
                 // по умолчанию, затем любой установленный, чтобы речь не пропала совсем.
-                val voiceId = item.voiceIdOverride ?: settingsRepository.voiceIdForText(text, TtsEngine.PIPER)
+                val voiceId = resolveResponseVoice(item)
                 val tts = initTtsEngine(voiceId)
                     ?: modelManager.installedVoices().firstOrNull()?.let { initTtsEngine(it) }
                 if (tts == null) {
@@ -307,6 +321,7 @@ class OfflineTtsManager(
     override fun speak(text: String, queueMode: Int, voiceIdOverride: String?) {
         scope.launch {
             if (queueMode == TtsManager.QUEUE_FLUSH) {
+                responseVoiceId = null
                 stopPlaybackOnly()
             }
             val sentences = splitIntoSentences(text)

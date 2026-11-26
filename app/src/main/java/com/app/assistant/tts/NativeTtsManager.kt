@@ -15,6 +15,8 @@ class NativeTtsManager(
     private val onSpeakingStateChanged: (isSpeaking: Boolean) -> Unit
 ) : TtsManager {
     private var textToSpeech: TextToSpeech? = null
+    /** Голос текущего ответа (префикс «[Имя]» приходит только в первом предложении). */
+    private var responseVoiceId: String? = null
     private var isInitialized = false
 
     // Track active/queued utterances to prevent premature transition to LISTENING state
@@ -74,10 +76,15 @@ class NativeTtsManager(
     }
 
     override fun speak(text: String, queueMode: Int, voiceIdOverride: String?) {
+        if (queueMode == TtsManager.QUEUE_FLUSH) responseVoiceId = null
         val tts = textToSpeech
         // Системный синтез тоже умеет разные голоса: выбираем тот, что привязан к
         // агенту в настройках, иначе — голос движка по умолчанию.
-        val wanted = voiceIdOverride ?: settingsRepository.voiceIdForText(text, TtsEngine.NATIVE)
+        val wanted = voiceIdOverride ?: responseVoiceId
+            ?: com.app.assistant.tts.VoiceResolver.agentName(text)?.let {
+                settingsRepository.voiceIdForText(text, TtsEngine.NATIVE).also { id -> responseVoiceId = id }
+            }
+            ?: settingsRepository.getDefaultVoice(TtsEngine.NATIVE)
         if (wanted.isNotEmpty()) {
             tts?.voices?.firstOrNull { it.name == wanted }?.let { voice ->
                 runCatching {

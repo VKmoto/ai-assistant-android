@@ -131,8 +131,11 @@ class GoogleTtsApiManager(
         }
         val url = "${SpeechConfig.GoogleTts.BASE_URL}?key=$apiKey"
         
-        val voiceName = settingsRepository.voiceIdForText(text, TtsEngine.GOOGLE)
-            .ifEmpty { "ru-RU-Wavenet-A" }
+        val voiceName = responseVoiceId
+            ?: com.app.assistant.tts.VoiceResolver.agentName(text)?.let {
+                settingsRepository.voiceIdForText(text, TtsEngine.GOOGLE).also { id -> responseVoiceId = id }
+            }
+            ?: settingsRepository.getDefaultVoice(TtsEngine.GOOGLE).ifEmpty { "ru-RU-Wavenet-A" }
         val parts = voiceName.split("-")
         val languageCode = if (parts.size >= 2) "${parts[0]}-${parts[1]}" else "en-US"
 
@@ -442,11 +445,15 @@ class GoogleTtsApiManager(
         }
     }
 
+    private var responseVoiceId: String? = null
+
     override fun speak(text: String, queueMode: Int, voiceIdOverride: String?) {
         scope.launch {
             if (queueMode == TtsManager.QUEUE_FLUSH) {
+                responseVoiceId = null
                 stopPlaybackOnly()
             }
+            if (voiceIdOverride != null) responseVoiceId = voiceIdOverride
             speechQueue.send(text)
             updateSpeakingState()
         }
