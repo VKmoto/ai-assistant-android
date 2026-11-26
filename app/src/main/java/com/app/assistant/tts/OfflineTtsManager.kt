@@ -27,7 +27,13 @@ class OfflineTtsManager(
     private val speechQueue = Channel<String>(Channel.UNLIMITED)
     private val audioQueue = Channel<GeneratedAudio>(Channel.UNLIMITED)
     
-    private var offlineTts: OfflineTts? = null
+    // Кэш движков по голосу: переключение между агентами не должно каждый раз
+    // поднимать 64-МБ модель заново. Два последних — компромисс между отзывчивостью и
+    // памятью телефона (каждая модель ~150 МБ RAM).
+    private val engines = object : LinkedHashMap<String, OfflineTts>(4, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, OfflineTts>?): Boolean =
+            size > 2
+    }
     private var audioTrack: AudioTrack? = null
     
     private var generatorJob: Job? = null
@@ -39,7 +45,6 @@ class OfflineTtsManager(
     private var isGenerating = false
     @Volatile
     private var isPlaying = false
-    private var isInitialized = false
 
     private class GeneratedAudio(val samples: ShortArray, val sampleRate: Int)
 
@@ -47,56 +52,48 @@ class OfflineTtsManager(
         startQueueProcessing()
     }
 
+    private val modelManager = TtsModelManager(context)
+
+    /**
+     * Поднять движок для конкретного голоса.
+     *
+     * Piper-модели — это VITS: model.onnx + tokens.txt + espeak-ng-data (фонемизация
+     * русского). Движок кэшируется по voiceId, чтобы частые переключения агентов не
+     * перезагружали модель.
+     */
     @Synchronized
-    private fun initTtsEngine(): Boolean {
-        if (isInitialized && offlineTts != null) return true
-        
-        try {
-            val modelConfig: OfflineTtsModelConfig
-            
-            val supertonicDir = File(context.filesDir, "sherpa-onnx-tts/sherpa-onnx-supertonic-3-tts-int8-2026-05-11")
-            val durationPredictor = File(supertonicDir, "duration_predictor.int8.onnx")
-            val textEncoder = File(supertonicDir, "text_encoder.int8.onnx")
-            val vectorEstimator = File(supertonicDir, "vector_estimator.int8.onnx")
-            val vocoder = File(supertonicDir, "vocoder.int8.onnx")
-            val ttsJson = File(supertonicDir, "tts.json")
-            val unicodeIndexer = File(supertonicDir, "unicode_indexer.bin")
-            val voiceStyle = File(supertonicDir, "voice.bin")
-            
-            if (!durationPredictor.exists() || !textEncoder.exists() || !vectorEstimator.exists() || 
-                !vocoder.exists() || !ttsJson.exists() || !unicodeIndexer.exists() || !voiceStyle.exists()) {
-                Log.w("OfflineTtsManager", "Cannot init OfflineTts (SUPERTONIC): Missing files. durationPredictor: ${durationPredictor.exists()}, textEncoder: ${textEncoder.exists()}, vectorEstimator: ${vectorEstimator.exists()}, vocoder: ${vocoder.exists()}, ttsJson: ${ttsJson.exists()}, unicodeIndexer: ${unicodeIndexer.exists()}, voiceStyle: ${voiceStyle.exists()}")
-                return false
-            }
-            
-            val supertonicConfig = OfflineTtsSupertonicModelConfig(
-                durationPredictor = durationPredictor.absolutePath,
-                textEncoder = textEncoder.absolutePath,
-                vectorEstimator = vectorEstimator.absolutePath,
-                vocoder = vocoder.absolutePath,
-                ttsJson = ttsJson.absolutePath,
-                unicodeIndexer = unicodeIndexer.absolutePath,
-                voiceStyle = voiceStyle.absolutePath
+    private fun initTtsEngine(voiceId: String): OfflineTts? {
+        engines[voiceId]?.let { return it }
+        if (!modelManager.isModelDownloaded(voiceId)) {
+            Log.w("OfflineTtsManager", "Voice $voiceId is not downloaded")
+            return null
+        }
+        return try {
+            val vits = OfflineTtsVitsModelConfig(
+                model = modelManager.getModelPath(voiceId),
+                lexicon = "",
+                tokens = modelManager.getTokensPath(voiceId),
+                dataDir = modelManager.getDataDir(voiceId),
+                dictDir = "",
+                noiseScale = 0.667f,
+                noiseScaleW = 0.8f,
+                lengthScale = 1.0f,
             )
-            modelConfig = OfflineTtsModelConfig(
-                supertonic = supertonicConfig,
-                numThreads = 2,
-                debug = true
-            )
-            
             val config = OfflineTtsConfig(
-                model = modelConfig,
-                maxNumSentences = 1
+                model = OfflineTtsModelConfig(
+                    vits = vits,
+                    numThreads = 2,
+                    debug = false,
+                ),
+                maxNumSentences = 1,
             )
-            
-            // JNI initialization requires AssetManager to be null when loading absolute paths
-            offlineTts = OfflineTts(null, config)
-            isInitialized = true
-            Log.i("OfflineTtsManager", "Engine initialized successfully (type: SUPERTONIC)")
-            return true
+            // JNI принимает AssetManager=null при абсолютных путях.
+            val tts = OfflineTts(null, config)
+            engines[voiceId] = tts
+            tts
         } catch (e: Exception) {
-            Log.e("OfflineTtsManager", "Failed to initialize OfflineTts engine", e)
-            return false
+            Log.e("OfflineTtsManager", "Failed to initialize voice $voiceId", e)
+            null
         }
     }
 
@@ -122,13 +119,18 @@ class OfflineTtsManager(
 
         generatorJob = scope.launch {
             for (text in speechQueue) {
-                if (!initTtsEngine()) {
-                    Log.w("OfflineTtsManager", "Engine not initialized. Skipping text: $text")
+                // Голос выбирается по префиксу «[Имя]», который ставит роутер: один чат —
+                // разные агенты — разные голоса. Нет модели этого голоса — пробуем голос
+                // по умолчанию, затем любой установленный, чтобы речь не пропала совсем.
+                val voiceId = settingsRepository.voiceIdForText(text)
+                val tts = initTtsEngine(voiceId)
+                    ?: modelManager.installedVoices().firstOrNull()?.let { initTtsEngine(it) }
+                if (tts == null) {
+                    Log.w("OfflineTtsManager", "No TTS voice model installed. Skipping: $text")
                     continue
                 }
 
-                val tts = offlineTts ?: continue
-                val cleanedText = cleanTextForTts(text)
+                val cleanedText = cleanTextForTts(VoiceResolver.stripAgentPrefix(text))
                 if (cleanedText.isEmpty()) continue
 
                 isGenerating = true
@@ -385,13 +387,12 @@ class OfflineTtsManager(
         stopPlaybackOnly()
         try {
             runBlocking(ttsDispatcher) {
-                offlineTts?.release()
-                offlineTts = null
+                engines.values.forEach { runCatching { it.release() } }
+                engines.clear()
             }
         } catch (e: Exception) {
             Log.e("OfflineTtsManager", "Error releasing offline TTS", e)
         }
-        isInitialized = false
         ttsDispatcher.close()
     }
 }

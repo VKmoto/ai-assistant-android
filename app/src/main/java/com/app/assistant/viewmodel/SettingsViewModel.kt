@@ -62,8 +62,28 @@ class SettingsViewModel(
     private val _ttsModelDownloadState = MutableStateFlow<DownloadState>(DownloadState.Idle)
     val ttsModelDownloadState: StateFlow<DownloadState> = _ttsModelDownloadState.asStateFlow()
 
-    private val _isTtsModelInstalled = MutableStateFlow(ttsModelManager.isModelDownloaded())
+    private val _isTtsModelInstalled = MutableStateFlow(ttsModelManager.isAnyModelDownloaded())
+    /** true = скачан хотя бы один офлайн-голос (режим OFFLINE доступен). */
     val isTtsModelInstalled: StateFlow<Boolean> = _isTtsModelInstalled.asStateFlow()
+
+    /** Какие голоса уже на устройстве (для списка в настройках). */
+    private val _installedVoices = MutableStateFlow(ttsModelManager.installedVoices())
+    val installedVoices: StateFlow<Set<String>> = _installedVoices.asStateFlow()
+
+    /** Голос, который сейчас качается (null = ничего не качается). */
+    private val _downloadingVoice = MutableStateFlow<String?>(null)
+    val downloadingVoice: StateFlow<String?> = _downloadingVoice.asStateFlow()
+
+    private val _defaultVoiceId = MutableStateFlow(settingsRepository.getDefaultVoiceId())
+    val defaultVoiceId: StateFlow<String> = _defaultVoiceId.asStateFlow()
+
+    /** Имена агентов, которых мы видели (для списка настроек). */
+    private val _agentVoiceNames = MutableStateFlow(settingsRepository.getKnownAgentNames())
+    val agentVoiceNames: StateFlow<List<String>> = _agentVoiceNames.asStateFlow()
+
+    /** Привязки «агент -> голос»; отсутствие ключа = голос по умолчанию. */
+    private val _agentVoices = MutableStateFlow(settingsRepository.getAgentVoices())
+    val agentVoices: StateFlow<Map<String, String>> = _agentVoices.asStateFlow()
 
     private val _isTranslationEnabled = MutableStateFlow(settingsRepository.getIsTranslationEnabled())
     val isTranslationEnabled: StateFlow<Boolean> = _isTranslationEnabled.asStateFlow()
@@ -96,8 +116,9 @@ class SettingsViewModel(
         if (!downloaded && _modelDownloadState.value !is DownloadState.Downloading) {
             _modelDownloadState.value = DownloadState.Idle
         }
-        val ttsDownloaded = ttsModelManager.isModelDownloaded()
+        val ttsDownloaded = ttsModelManager.isAnyModelDownloaded()
         _isTtsModelInstalled.value = ttsDownloaded
+        _installedVoices.value = ttsModelManager.installedVoices()
         if (!ttsDownloaded && _ttsModelDownloadState.value !is DownloadState.Downloading) {
             _ttsModelDownloadState.value = DownloadState.Idle
         }
@@ -236,23 +257,26 @@ class SettingsViewModel(
         }
     }
 
-    fun startTtsModelDownload() {
+    fun startTtsModelDownload(voiceId: String = com.app.assistant.tts.VoiceCatalog.DEFAULT_ID) {
         viewModelScope.launch {
             _ttsModelDownloadState.value = DownloadState.Downloading(0f, 0L, 0L)
+            _downloadingVoice.value = voiceId
             ttsModelManager.downloadModel(
                 client = okHttpClient,
+                voiceId = voiceId,
                 onProgress = { downloadedBytes, totalBytes ->
                     val progress = if (totalBytes > 0) downloadedBytes.toFloat() / totalBytes else 0f
                     _ttsModelDownloadState.value = DownloadState.Downloading(progress, downloadedBytes, totalBytes)
                 },
                 onComplete = { success, errorMsg ->
                     viewModelScope.launch {
+                        _downloadingVoice.value = null
+                        _installedVoices.value = ttsModelManager.installedVoices()
+                        _isTtsModelInstalled.value = ttsModelManager.isAnyModelDownloaded()
                         if (success) {
                             _ttsModelDownloadState.value = DownloadState.Completed
-                            _isTtsModelInstalled.value = true
                         } else {
                             _ttsModelDownloadState.value = DownloadState.Error(errorMsg ?: "Unknown download error")
-                            _isTtsModelInstalled.value = ttsModelManager.isModelDownloaded()
                         }
                     }
                 }
@@ -263,18 +287,35 @@ class SettingsViewModel(
     fun cancelTtsModelDownload() {
         ttsModelManager.cancelDownload()
         _ttsModelDownloadState.value = DownloadState.Idle
+        _downloadingVoice.value = null
     }
 
-    fun deleteTtsModel() {
+    fun deleteTtsModel(voiceId: String = com.app.assistant.tts.VoiceCatalog.DEFAULT_ID) {
         viewModelScope.launch(Dispatchers.IO) {
-            ttsModelManager.deleteLocalModel()
-            _isTtsModelInstalled.value = false
+            ttsModelManager.deleteLocalModel(voiceId)
+            _installedVoices.value = ttsModelManager.installedVoices()
+            _isTtsModelInstalled.value = ttsModelManager.isAnyModelDownloaded()
             _ttsModelDownloadState.value = DownloadState.Idle
-            val currentMode = settingsRepository.getTtsMode()
-            if (currentMode != com.app.assistant.tts.TtsMode.NATIVE) {
-                settingsRepository.setTtsMode(com.app.assistant.tts.TtsMode.NATIVE)
+            // Если не осталось ни одного голоса, офлайн-режим работать не может —
+            // возвращаем системный синтез, иначе приложение просто замолчит.
+            if (!ttsModelManager.isAnyModelDownloaded()) {
+                val currentMode = settingsRepository.getTtsMode()
+                if (currentMode != com.app.assistant.tts.TtsMode.NATIVE) {
+                    settingsRepository.setTtsMode(com.app.assistant.tts.TtsMode.NATIVE)
+                }
             }
         }
+    }
+
+    fun setDefaultVoice(voiceId: String) {
+        settingsRepository.setDefaultVoiceId(voiceId)
+        _defaultVoiceId.value = voiceId
+    }
+
+    fun setAgentVoice(agentName: String, voiceId: String) {
+        settingsRepository.setAgentVoice(agentName, voiceId)
+        _agentVoiceNames.value = settingsRepository.getKnownAgentNames()
+        _agentVoices.value = settingsRepository.getAgentVoices()
     }
 
     fun saveSettings(

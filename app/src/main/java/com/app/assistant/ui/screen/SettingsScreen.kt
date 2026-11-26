@@ -1246,9 +1246,9 @@ fun SettingsScreenContent(
                         },
                         title = "Офлайн-модель синтеза речи",
                         description = if (isTtsInstalled) {
-                            "Uses Supertonic/ONNX engine on-device without internet."
+                            "Русские голоса (Piper/ONNX) работают на устройстве без интернета."
                         } else {
-                            "Uses Supertonic/ONNX engine on-device without internet. Requires downloading the model first."
+                            "Русские голоса (Piper/ONNX) работают без интернета. Сначала скачайте хотя бы один голос ниже."
                         }
                     )
 
@@ -1292,21 +1292,7 @@ fun SettingsScreenContent(
 
                     Spacer(modifier = Modifier.height(12.dp))
                     
-                    ModelDownloadCard(
-                        title = "Английская модель Supertonic (int8)",
-                        description = "Supertonic v3 English int8 model.",
-                        isInstalled = isTtsInstalled,
-                        downloadState = ttsDownloadState,
-                        onDownload = onStartTtsModelDownload,
-                        onDelete = onDeleteTtsModel,
-                        onCancel = onCancelTtsModelDownload,
-                        onClear = onDeleteTtsModel,
-                        onRetry = onStartTtsModelDownload,
-                        installedText = "Установлена (~66 МБ)",
-                        notDownloadedText = "Статус: не загружена",
-                        deleteButtonText = "Удалить",
-                        downloadButtonText = "Скачать"
-                    )
+                    OfflineVoicesSection(settingsViewModel)
                 }
             }
 

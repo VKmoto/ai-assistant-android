@@ -460,9 +460,12 @@ class EdgeTtsApiManager(
         ws.send(configMsg)
 
         val escapedText = escapeXml(text)
-        // Голос и язык SSML — по языку системы: иначе русский ответ читается
-        // английским голосом (Sonia), что звучит как иностранный акцент.
-        val (voiceName, langCode) = SpeechConfig.EdgeTts.voiceFor(java.util.Locale.getDefault())
+        // Голос выбирается по агенту из префикса «[Имя]»: у Edge TTS русских голосов
+        // всего два (Светлана/Дмитрий), поэтому женские офлайн-голоса идут на Светлану,
+        // мужские — на Дмитрия; уникальность обеспечивает офлайн-режим.
+        val voice = VoiceCatalog.byId(settingsRepository.voiceIdForText(text))
+        val voiceName = voice.onlineVoice
+        val langCode = if (voiceName.startsWith("ru-")) "ru-RU" else "en-US"
         val ssmlMsg = "X-RequestId:$requestId\r\n" +
                 "Content-Type:application/ssml+xml\r\n" +
                 "X-Timestamp:$dateStr\r\n" +

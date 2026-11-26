@@ -12,126 +12,117 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+/**
+ * Скачивание и хранение офлайн-голосов (русские Piper-модели из VoiceCatalog).
+ *
+ * Раньше здесь была одна жёстко заданная модель Supertonic (английская). Теперь
+ * каталог: у каждого голоса свой архив и свой каталог, поэтому «скачать ещё голос»
+ * не затирает уже скачанные и не требует переустановки приложения.
+ *
+ * Архив распаковывается системным `tar -xjf`: bz2 на устройстве разбирать нечем, а
+ * бинарник tar есть в Android с древних версий. После распаковки в baseDir появляется
+ * папка dirName с model.onnx, tokens.txt и espeak-ng-data.
+ */
 class TtsModelManager(private val context: Context) {
 
     private val baseDir = File(context.filesDir, "sherpa-onnx-tts")
-    private val modelDir = File(baseDir, "sherpa-onnx-supertonic-3-tts-int8-2026-05-11")
-    
-    private val downloadUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/sherpa-onnx-supertonic-3-tts-int8-2026-05-11.tar.bz2"
-    
+
     private var currentCall: okhttp3.Call? = null
     private val isCancelled = AtomicBoolean(false)
 
-    fun isModelDownloaded(): Boolean {
-        val durationPredictor = File(modelDir, "duration_predictor.int8.onnx")
-        val textEncoder = File(modelDir, "text_encoder.int8.onnx")
-        val vectorEstimator = File(modelDir, "vector_estimator.int8.onnx")
-        val vocoder = File(modelDir, "vocoder.int8.onnx")
-        val ttsJson = File(modelDir, "tts.json")
-        val unicodeIndexer = File(modelDir, "unicode_indexer.bin")
-        val voiceStyle = File(modelDir, "voice.bin")
-        return durationPredictor.exists() && durationPredictor.length() > 0 &&
-               textEncoder.exists() && textEncoder.length() > 0 &&
-               vectorEstimator.exists() && vectorEstimator.length() > 0 &&
-               vocoder.exists() && vocoder.length() > 0 &&
-               ttsJson.exists() && ttsJson.length() > 0 &&
-               unicodeIndexer.exists() && unicodeIndexer.length() > 0 &&
-               voiceStyle.exists() && voiceStyle.length() > 0
+    fun modelDir(voiceId: String): File = File(baseDir, VoiceCatalog.byId(voiceId).dirName)
+
+    fun getModelPath(voiceId: String): String =
+        File(modelDir(voiceId), VoiceCatalog.byId(voiceId).modelFile).absolutePath
+
+    fun getTokensPath(voiceId: String): String = File(modelDir(voiceId), "tokens.txt").absolutePath
+
+    /** Piper фонемизирует через espeak-ng; данные лежат внутри архива голоса. */
+    fun getDataDir(voiceId: String): String = File(modelDir(voiceId), "espeak-ng-data").absolutePath
+
+    fun isModelDownloaded(voiceId: String): Boolean {
+        val voice = VoiceCatalog.byId(voiceId)
+        val dir = File(baseDir, voice.dirName)
+        val model = File(dir, voice.modelFile)
+        val tokens = File(dir, "tokens.txt")
+        val espeak = File(dir, "espeak-ng-data")
+        return model.exists() && model.length() > 0 &&
+            tokens.exists() && tokens.length() > 0 &&
+            espeak.isDirectory
     }
 
-    fun deleteLocalModel(): Boolean {
-        return deleteDirectory(modelDir)
-    }
+    fun installedVoices(): Set<String> =
+        VoiceCatalog.voices.filter { isModelDownloaded(it.id) }.map { it.id }.toSet()
+
+    fun isAnyModelDownloaded(): Boolean = installedVoices().isNotEmpty()
+
+    fun deleteLocalModel(voiceId: String): Boolean = deleteDirectory(modelDir(voiceId))
 
     private fun deleteDirectory(dir: File): Boolean {
         if (dir.isDirectory) {
-            val children = dir.listFiles()
-            if (children != null) {
-                for (child in children) {
-                    deleteDirectory(child)
-                }
-            }
+            dir.listFiles()?.forEach { deleteDirectory(it) }
         }
         return dir.delete()
     }
 
     suspend fun downloadModel(
         client: OkHttpClient,
+        voiceId: String,
         onProgress: (downloadedBytes: Long, totalBytes: Long) -> Unit,
-        onComplete: (success: Boolean, errorMessage: String?) -> Unit
+        onComplete: (success: Boolean, errorMessage: String?) -> Unit,
     ) {
+        val voice = VoiceCatalog.byId(voiceId)
         isCancelled.set(false)
         withContext(Dispatchers.IO) {
-            val tempArchive = File(context.cacheDir, "sherpa-onnx-supertonic-3-tts-int8-2026-05-11.tar.bz2")
+            val tempArchive = File(context.cacheDir, "${voice.dirName}.tar.bz2")
             try {
-                if (tempArchive.exists()) {
-                    tempArchive.delete()
-                }
-                
-                if (!baseDir.exists()) {
-                    baseDir.mkdirs()
-                }
+                if (tempArchive.exists()) tempArchive.delete()
+                if (!baseDir.exists()) baseDir.mkdirs()
 
-                val request = Request.Builder()
-                    .url(downloadUrl)
-                    .build()
+                // Старые файлы этого же голоса не должны попасть в новую распаковку.
+                deleteLocalModel(voiceId)
 
+                val request = Request.Builder().url(voice.archiveUrl).build()
                 val call = client.newCall(request)
                 currentCall = call
-
-                if (isCancelled.get()) {
-                    throw IOException("Download cancelled by user")
-                }
+                if (isCancelled.get()) throw IOException("Download cancelled by user")
 
                 val response = call.execute()
-                if (!response.isSuccessful) {
-                    throw IOException("HTTP error code: ${response.code}")
-                }
+                if (!response.isSuccessful) throw IOException("HTTP error code: ${response.code}")
+                val body = response.body ?: throw IOException("Empty response body")
+                val totalBytes = body.contentLength()
 
-                val responseBody = response.body ?: throw IOException("Empty response body")
-                val totalBytes = responseBody.contentLength()
-                
-                responseBody.byteStream().use { inputStream ->
-                    FileOutputStream(tempArchive).use { outputStream ->
-                        val buffer = ByteArray(1024 * 64)
-                        var bytesRead: Int
-                        var downloadedBytes = 0L
-
-                        while (inputStream.read(buffer).also { bytesRead = it } != -1) {
-                            if (isCancelled.get()) {
-                                throw IOException("Download cancelled by user")
-                            }
-                            outputStream.write(buffer, 0, bytesRead)
-                            downloadedBytes += bytesRead
-                            onProgress(downloadedBytes, totalBytes)
+                body.byteStream().use { input ->
+                    FileOutputStream(tempArchive).use { output ->
+                        val buffer = ByteArray(64 * 1024)
+                        var downloaded = 0L
+                        var read: Int
+                        while (input.read(buffer).also { read = it } != -1) {
+                            if (isCancelled.get()) throw IOException("Download cancelled by user")
+                            output.write(buffer, 0, read)
+                            downloaded += read
+                            onProgress(downloaded, totalBytes)
                         }
-                        outputStream.flush()
+                        output.flush()
                     }
                 }
                 response.close()
 
-                if (isCancelled.get()) {
-                    throw IOException("Download cancelled by user")
-                }
-
-                // Extract archive
-                onProgress(totalBytes, totalBytes) // Mark download as 100% before extraction
-                val extractionSuccess = extractTarBz2(tempArchive, baseDir)
-                
-                if (extractionSuccess && isModelDownloaded()) {
+                if (isCancelled.get()) throw IOException("Download cancelled by user")
+                onProgress(totalBytes, totalBytes)
+                val extracted = extractTarBz2(tempArchive, baseDir)
+                if (extracted && isModelDownloaded(voiceId)) {
                     onComplete(true, null)
                 } else {
-                    onComplete(false, "Extraction failed. Ensure your device has enough free storage.")
+                    onComplete(false, "Не удалось распаковать голос. Проверьте свободное место.")
                 }
             } catch (e: Exception) {
-                Log.e("TtsModelManager", "Error downloading/extracting TTS model", e)
-                val msg = if (isCancelled.get()) "Download cancelled." else e.message ?: "Unknown error"
+                Log.e("TtsModelManager", "Error downloading voice $voiceId", e)
+                val msg = if (isCancelled.get()) "Загрузка отменена." else e.message ?: "Неизвестная ошибка"
                 onComplete(false, msg)
             } finally {
                 currentCall = null
-                if (tempArchive.exists()) {
-                    tempArchive.delete()
-                }
+                if (tempArchive.exists()) tempArchive.delete()
             }
         }
     }
@@ -144,15 +135,13 @@ class TtsModelManager(private val context: Context) {
 
     private fun extractTarBz2(archiveFile: File, targetDir: File): Boolean {
         targetDir.mkdirs()
-        try {
-            Log.i("TtsModelManager", "Starting native tar extraction of ${archiveFile.name} to ${targetDir.name}...")
+        return try {
             val process = ProcessBuilder()
                 .command("tar", "-xjf", archiveFile.absolutePath, "-C", targetDir.absolutePath)
                 .redirectErrorStream(true)
                 .start()
-            
             val exitCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                if (process.waitFor(90, java.util.concurrent.TimeUnit.SECONDS)) { // 90 secs timeout for slower devices
+                if (process.waitFor(120, java.util.concurrent.TimeUnit.SECONDS)) {
                     process.exitValue()
                 } else {
                     process.destroyForcibly()
@@ -161,18 +150,13 @@ class TtsModelManager(private val context: Context) {
             } else {
                 process.waitFor()
             }
-            
-            if (exitCode == 0) {
-                Log.i("TtsModelManager", "Native tar extraction completed successfully.")
-                return true
+            if (exitCode != 0) {
+                Log.e("TtsModelManager", "tar failed ($exitCode): ${process.inputStream.bufferedReader().readText()}")
             }
-            
-            val reader = process.inputStream.bufferedReader()
-            val output = reader.readText()
-            Log.e("TtsModelManager", "Native tar failed with exit code $exitCode. Output: $output")
+            exitCode == 0
         } catch (e: Exception) {
             Log.e("TtsModelManager", "Failed to run native tar command", e)
+            false
         }
-        return false
     }
 }

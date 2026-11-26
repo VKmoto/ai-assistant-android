@@ -2,7 +2,6 @@ package com.app.assistant.tts
 
 import android.content.Context
 import com.app.assistant.repository.SettingsRepository
-import java.io.File
 
 class TtsEngineSelector(
     private val context: Context,
@@ -84,16 +83,12 @@ class TtsEngineSelector(
         apiTtsManager?.shutdown()
     }
 
-    private fun isOfflineModelInstalled(): Boolean {
-        val supertonicDir = File(context.filesDir, "sherpa-onnx-tts/sherpa-onnx-supertonic-3-tts-int8-2026-05-11")
-        val durationPredictor = File(supertonicDir, "duration_predictor.int8.onnx")
-        val textEncoder = File(supertonicDir, "text_encoder.int8.onnx")
-        val vectorEstimator = File(supertonicDir, "vector_estimator.int8.onnx")
-        val vocoder = File(supertonicDir, "vocoder.int8.onnx")
-        val ttsJson = File(supertonicDir, "tts.json")
-        val unicodeIndexer = File(supertonicDir, "unicode_indexer.bin")
-        val voiceStyle = File(supertonicDir, "voice.bin")
-        return durationPredictor.exists() && textEncoder.exists() && vectorEstimator.exists() &&
-               vocoder.exists() && ttsJson.exists() && unicodeIndexer.exists() && voiceStyle.exists()
-    }
+    private val ttsModelManager = TtsModelManager(context)
+
+    /**
+     * Офлайн-режим возможен, если скачан ХОТЯ БЫ ОДИН голос: конкретный голос агента
+     * выбирается уже внутри OfflineTtsManager, а без модели он откатывается на любой
+     * установленный. Отсутствие «голоса по умолчанию» не должно выключать режим.
+     */
+    private fun isOfflineModelInstalled(): Boolean = ttsModelManager.isAnyModelDownloaded()
 }

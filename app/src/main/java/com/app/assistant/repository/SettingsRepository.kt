@@ -222,5 +222,75 @@ class SettingsRepository(
     fun setTtsMode(mode: com.app.assistant.tts.TtsMode) {
         sharedPreferences.edit().putString("tts_mode", mode.name).apply()
     }
+
+    // ---- голоса агентов -----------------------------------------------------
+    //
+    // Ответ агента приходит из роутера с префиксом «[Имя]», поэтому голос выбирается по
+    // имени, а не по настройке «на весь чат»: в одном разговоре могут ответить разные
+    // агенты. Маппинг хранится в обычных prefs (не секрет), имена агентов накапливаются
+    // сами — так настройки показывают тех, кто реально ответил, без ручного списка.
+
+    fun getDefaultVoiceId(): String =
+        sharedPreferences.getString("tts_default_voice", com.app.assistant.tts.VoiceCatalog.DEFAULT_ID)
+            ?: com.app.assistant.tts.VoiceCatalog.DEFAULT_ID
+
+    fun setDefaultVoiceId(voiceId: String) {
+        sharedPreferences.edit().putString("tts_default_voice", voiceId).apply()
+    }
+
+    /** Голос конкретного агента; null = «как по умолчанию» (и дефолт из каталога). */
+    fun getAgentVoice(agentName: String): String? =
+        sharedPreferences.getString("tts_agent_voice_${agentName.lowercase()}", null)
+
+    fun setAgentVoice(agentName: String, voiceId: String) {
+        sharedPreferences.edit()
+            .putString("tts_agent_voice_${agentName.lowercase()}", voiceId)
+            .putStringSet("tts_agent_names", getKnownAgentNames().toSet() + agentName)
+            .apply()
+    }
+
+    fun getKnownAgentNames(): List<String> {
+        val raw = sharedPreferences.getStringSet("tts_agent_names", emptySet()) ?: emptySet()
+        // Дефолтная тройка видна сразу, не дожидаясь первого ответа: иначе настройки
+        // выглядели бы пустыми, пока агент ещё ни разу не заговорил.
+        val defaults = listOf("Старпом", "Масяня", "Док")
+        return (raw + defaults).distinct().sorted()
+    }
+
+    /** Запомнить имя агента, встреченное в ответе, чтобы оно появилось в настройках. */
+    fun rememberAgentName(agentName: String) {
+        val name = agentName.trim()
+        if (name.isEmpty()) return
+        val current = sharedPreferences.getStringSet("tts_agent_names", emptySet()) ?: emptySet()
+        if (current.contains(name)) return
+        sharedPreferences.edit()
+            .putStringSet("tts_agent_names", current + name)
+            .apply()
+    }
+
+    /** Все привязки «агент -> голос» для настроек. */
+    fun getAgentVoices(): Map<String, String> =
+        getKnownAgentNames().mapNotNull { name -> getAgentVoice(name)?.let { name to it } }.toMap()
+
+    /**
+     * Голос, которым говорить этот текст.
+     *
+     * Префикс «[Имя]» ставит роутер (bb-messenger) для каждого ответа; если его нет
+     * (служебные сообщения, старые записи), берём голос по умолчанию.
+     */
+    fun voiceIdForText(text: String): String {
+        val name = VoiceResolver.agentName(text)
+        if (name == null) return getDefaultVoiceId()
+        rememberAgentName(name)
+        getAgentVoice(name)?.let { return it }
+        // Дефолты владельца (2026-11-26): Старпом и Масяня — женский голос Ирины,
+        // Док — мужской Денис. Незнакомый агент получает голос по умолчанию.
+        return when (name.lowercase()) {
+            "старпом" -> "irina"
+            "масяня" -> "irina"
+            "док" -> "denis"
+            else -> getDefaultVoiceId()
+        }
+    }
 }
 
