@@ -80,12 +80,15 @@ class MainActivity : ComponentActivity() {
      * включение режима разговора там было бы сюрпризом.
      */
     private var assistantLaunchHandled = false
-    /**
-     * Когда микрофон стартовал. Нужен, чтобы отличить эхо собственного голоса ассистента
-     * (микрофон открылся, динамик ещё говорит) от настоящего перебивания: в первом случае
-     * TTS глушить нельзя, иначе ответ обрывается на первом слоге.
-     */
-    private var listeningStartedAt = 0L
+    /** Момент, с которого микрофон непрерывно громче порога перебивания. */
+    private var loudSince = 0L
+
+    companion object {
+        /** RMS-порог «человек говорит» (доля от полной шкалы). */
+        private const val BARGE_IN_RMS = 0.12f
+        /** Сколько держится громкость, чтобы это считалось перебиванием (мс). */
+        private const val BARGE_IN_HOLD_MS = 250L
+    }
     private var activeCollectionJob: kotlinx.coroutines.Job? = null
 
     private val screenCaptureLauncher = registerForActivityResult(
@@ -396,7 +399,6 @@ class MainActivity : ComponentActivity() {
             com.app.assistant.util.TtsTrace.add("activity", "startListening skipped: TTS is speaking")
             return
         }
-        listeningStartedAt = System.currentTimeMillis()
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), 101)
             return
@@ -415,24 +417,37 @@ class MainActivity : ComponentActivity() {
 
                 override fun onAudioLevelChanged(level: Float) {
                     viewModel.setAudioAmplitude(level)
+                    // Перебивание по громкости: тихие звуки (тап, прокрутка, шорох,
+                    // эхо собственного динамика) ниже порога и TTS не трогают. Голос
+                    // человека громче порога и держится дольше BARGE_IN_HOLD_MS —
+                    // только тогда останавливаем чтение.
+                    if (textToSpeechManager.isSpeaking()) {
+                        val now = System.currentTimeMillis()
+                        if (level >= BARGE_IN_RMS) {
+                            if (loudSince == 0L) loudSince = now
+                            if (now - loudSince >= BARGE_IN_HOLD_MS) {
+                                com.app.assistant.util.TtsTrace.add(
+                                    "activity",
+                                    "barge-in by loudness: level=$level hold=${now - loudSince}ms",
+                                )
+                                textToSpeechManager.stop()
+                                loudSince = 0L
+                            }
+                        } else {
+                            loudSince = 0L
+                        }
+                    } else {
+                        loudSince = 0L
+                    }
                 }
 
                 override fun onBeginningOfSpeech() {
                     viewModel.setListening(true)
                     viewModel.setVoiceProcessing(false)
-                    // Озвучку НЕ останавливаем.
-                    //
-                    // Раньше любое «начало речи» глушило TTS (barge-in). В режиме
-                    // разговора микрофон слушает постоянно, поэтому шум, эхо из
-                    // динамика или прокрутка ленты обрывали чтение ответа (жалоба
-                    // владельца 2026-11-26: «при прокрутке чтение сбивается»).
-                    // Ответ должен дочитываться целиком; остановить можно кнопкой.
-                    if (textToSpeechManager.isSpeaking()) {
-                        com.app.assistant.util.TtsTrace.add(
-                            "activity",
-                            "speech while TTS speaks: ignored (barge-in disabled)",
-                        )
-                    }
+                    // Сам факт «начало речи» больше не глушит TTS: в режиме разговора
+                    // микрофон слушает постоянно, и на это событие попадали шум, эхо и
+                    // прокрутка ленты. Перебивание решается по ГРОМКОСТИ в
+                    // onAudioLevelChanged ниже.
                 }
 
                 override fun onEndOfSpeech() {
