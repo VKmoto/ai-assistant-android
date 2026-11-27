@@ -45,8 +45,9 @@ object PomodoroSound {
         runCatching {
             // По умолчанию — будильник: он громче уведомления и не тонет в потоке
             // сообщений (жалоба владельца 2026-11-27).
-            val target = uri ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-            RingtoneManager.getRingtone(context.applicationContext, android.net.Uri.parse(target))?.play()
+            val target: android.net.Uri = uri?.let { android.net.Uri.parse(it) }
+                ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+            RingtoneManager.getRingtone(context.applicationContext, target)?.play()
         }
     }
 }
