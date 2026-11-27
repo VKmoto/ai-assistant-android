@@ -114,6 +114,7 @@ fun TasksScreen(
     onBack: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     val client = MainViewModelFactory.okHttpClient
 
     var baseUrl by remember { mutableStateOf(settingsRepository.getTasksUrl()) }
