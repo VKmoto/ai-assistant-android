@@ -76,6 +76,7 @@ import com.app.assistant.ui.components.DateTimeValue
 import com.app.assistant.repository.SettingsRepository
 import com.app.assistant.viewmodel.MainViewModelFactory
 import kotlinx.coroutines.CancellationException
+import okhttp3.OkHttpClient
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -485,7 +486,7 @@ private fun PomodoroTab(
         Spacer(Modifier.height(24.dp))
 
         TomatoButton(
-            size = 200.dp,
+            diameter = 200.dp,
             running = running,
             onClick = {
                 if (!running && sessionId == null && seconds == 0) seconds = 25 * 60
@@ -526,14 +527,14 @@ private fun PomodoroTab(
 }
 
 @Composable
-private fun TomatoButton(size: Dp, running: Boolean, onClick: () -> Unit) {
+private fun TomatoButton(diameter: Dp, running: Boolean, onClick: () -> Unit) {
     Box(
-        modifier = Modifier.size(size).clickable(onClick = onClick),
+        modifier = Modifier.size(diameter).clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
-            val w = this.size.width
-            val h = this.size.height
+            val w = size.width
+            val h = size.height
             val cx = w / 2f
             val cy = h * 0.58f
             val r = w * 0.40f
