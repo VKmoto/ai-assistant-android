@@ -81,6 +81,9 @@ function usage(): never {
   tasks move <id> <todo|in_progress|waiting|done|cancelled>
   tasks subtask <parent_id> "<заголовок>"
   tasks remind <id> "<2026-11-27 09:00>" [--channels local,max,email]
+  tasks reminders <id> [--json]          # напоминания задачи и их id
+  tasks unremind <reminder_id>           # удалить напоминание
+  tasks reschedule <id> "<2026-11-30 09:00>"  # перенести срок (напоминания снимаются)
   tasks undo <agent_action_id>
   tasks actions [--limit N] [--json]
   tasks inbox "<заголовок>" [--source email|max|telegram|pipeline] [--ref-url URL]
@@ -157,6 +160,37 @@ async function main(): Promise<void> {
       const channels = typeof flags["--channels"] === "string" ? flags["--channels"].split(",") : undefined;
       const r = (await api("POST", `/api/v1/tasks/${id}/reminders`, { fire_at: when, channels })) as Record<string, unknown>;
       console.log(json ? JSON.stringify(r, null, 2) : `напоминание ${r["id"]} на ${when}`);
+      return;
+    }
+    case "reminders": {
+      const id = positional[0];
+      if (!id) usage();
+      const data = (await api("GET", `/api/v1/tasks/${id}/reminders`)) as { reminders: Record<string, unknown>[] };
+      if (json) return console.log(JSON.stringify(data.reminders, null, 2));
+      if (data.reminders.length === 0) return console.log("напоминаний нет");
+      data.reminders.forEach((r) => {
+        const at = r["fire_at"]
+          ? new Date(new Date(String(r["fire_at"])).getTime() + 3 * 3600_000).toISOString().slice(0, 16).replace("T", " ")
+          : "—";
+        const channels = Array.isArray(r["channels"]) ? (r["channels"] as string[]).join(",") : "—";
+        console.log(`${r["id"]}  [${r["status"]}]  ${at} МСК  ${channels}`);
+      });
+      return;
+    }
+    case "unremind": {
+      const id = positional[0];
+      if (!id) usage();
+      await api("DELETE", `/api/v1/reminders/${id}`);
+      console.log(`напоминание ${id} удалено`);
+      return;
+    }
+    case "reschedule": {
+      const [id, when] = positional;
+      if (!id || !when) usage();
+      // Сервер сам снимает pending-напоминания задачи при смене due_at: напоминание
+      // относится ко времени задачи и иначе противоречило бы новому сроку.
+      const task = (await api("PATCH", `/api/v1/tasks/${id}`, { due_at: when })) as Record<string, unknown>;
+      console.log(json ? JSON.stringify(task, null, 2) : `перенесена: ${fmt(task)} (напоминания сняты, поставьте новое через \`tasks remind\`)`);
       return;
     }
     case "undo": {

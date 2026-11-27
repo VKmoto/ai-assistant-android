@@ -244,12 +244,22 @@ const server = createServer((req, res) => {
       return sendJson(res, 201, reminder);
     }
 
+    if (remindMatch && method === "GET") {
+      return sendJson(res, 200, { reminders: await store.listReminders(remindMatch[1]!) });
+    }
+
     if (path === "/api/v1/reminders/due" && method === "GET") {
       return sendJson(res, 200, { reminders: await store.dueRemindersForDevice() });
     }
     if (path === "/api/v1/reminders/upcoming" && method === "GET") {
       const hours = Number(url.searchParams.get("hours") ?? 24);
       return sendJson(res, 200, { reminders: await store.upcomingRemindersForDevice(Number.isFinite(hours) ? hours : 24) });
+    }
+
+    const reminderMatch = /^\/api\/v1\/reminders\/([^/]+)$/.exec(path);
+    if (reminderMatch && method === "DELETE") {
+      const ok = await store.cancelReminder(reminderMatch[1]!);
+      return ok ? sendJson(res, 200, { ok: true }) : fail(res, 404, "reminder not found or already sent");
     }
 
     const snoozeMatch = /^\/api\/v1\/reminders\/([^/]+)\/snooze$/.exec(path);

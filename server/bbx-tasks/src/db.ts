@@ -353,7 +353,12 @@ export class Store {
     const params: unknown[] = [id];
     for (const key of allowed) {
       if (!(key in patch)) continue;
-      params.push(patch[key]);
+      // «2026-12-07 10:00» без зоны — это время владельца (МСК). Раньше PATCH понимал
+      // его как UTC и переносил задачу на 3 часа позже, чем просил владелец.
+      const value = key === "due_at" && typeof patch[key] === "string"
+        ? this.normalizeTime(patch[key] as string)
+        : patch[key];
+      params.push(value);
       sets.push(`${key} = $${params.length}`);
     }
     if (sets.length === 0) return before;
@@ -363,6 +368,13 @@ export class Store {
       params,
     );
     const after = r.rows[0] ?? null;
+    // Срок сдвинули — старые напоминания больше не про это время.
+    if ("due_at" in patch) {
+      const cancelled = await this.cancelRemindersForTask(id);
+      if (cancelled > 0) {
+        console.log(`[tasks] due_at changed for ${id}: cancelled ${cancelled} reminder(s)`);
+      }
+    }
     await this.audit(actor, "update", "task", id, before, after);
     return after;
   }
@@ -405,6 +417,43 @@ export class Store {
    * доставляют параллельно, и общий status='sent' означал бы, что телефон уже не
    * получит напоминание, если воркер успел первым (он тикает каждые 15 с, телефон — реже).
    */
+  /** Напоминания задачи (для карточки и CLI). */
+  async listReminders(taskId: string): Promise<Array<{ id: string; task_id: string; fire_at: string; channels: string[]; status: string }>> {
+    const r = await this.pool.query<{ id: string; task_id: string; fire_at: string; channels: string[]; status: string }>(
+      `SELECT id, task_id, fire_at::text, channels, status
+         FROM todo.reminders WHERE task_id = $1
+        ORDER BY (status <> 'pending'), fire_at`,
+      [taskId],
+    );
+    return r.rows;
+  }
+
+  /** Снять напоминание совсем (не «отложить»): pending/snoozed → cancelled. */
+  async cancelReminder(id: string): Promise<boolean> {
+    const r = await this.pool.query(
+      `UPDATE todo.reminders SET status='cancelled', last_error='cancelled by user'
+        WHERE id=$1 AND status IN ('pending','snoozed')`,
+      [id],
+    );
+    return (r.rowCount ?? 0) > 0;
+  }
+
+  /**
+   * Перенос срока обнуляет напоминания задачи.
+   *
+   * Иначе получалось два противоречащих факта: задача стоит на 1-е, а напоминание о ней
+   * осталось на 30-е (случай «старой машины», 2026-11-27). Напоминание относится ко
+   * времени задачи, поэтому при смене срока оно снимается — новое ставится осознанно.
+   */
+  async cancelRemindersForTask(taskId: string): Promise<number> {
+    const r = await this.pool.query(
+      `UPDATE todo.reminders SET status='cancelled', last_error='due_at changed'
+        WHERE task_id=$1 AND status IN ('pending','snoozed')`,
+      [taskId],
+    );
+    return r.rowCount ?? 0;
+  }
+
   async dueRemindersForDevice(limit = 50): Promise<unknown[]> {
     const r = await this.pool.query<{ id: string }>(
       `UPDATE todo.reminders r SET local_sent_at = now()

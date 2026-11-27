@@ -380,6 +380,24 @@ fun TasksScreen(
         TaskDetailsDialog(
             task = selected!!,
             onDismiss = { selected = null },
+            onDeleteReminder = {
+                val task = selected
+                if (task != null) {
+                    scope.launch {
+                        runCatching {
+                            TasksApi.reminders(client, config, task.id)
+                                .filter { it.status == "pending" || it.status == "snoozed" }
+                                .forEach { TasksApi.deleteReminder(client, config, it.id) }
+                        }
+                            .onSuccess {
+                                ReminderScheduler.cancelExact(context, "task_${task.id}")
+                                selected = null
+                                refreshKey++
+                            }
+                            .onFailure { e -> e.rethrowIfCancellation(); error = e.message }
+                    }
+                }
+            },
             onUpdateTitle = { newTitle ->
                 val task = selected
                 if (task != null) {
@@ -921,6 +939,7 @@ private fun TaskDetailsDialog(
     onAddReminder: () -> Unit,
     onUpdateDue: (DateTimeValue) -> Unit,
     onUpdateTitle: (String) -> Unit,
+    onDeleteReminder: () -> Unit,
     onComplete: () -> Unit,
 ) {
     // Срок можно сдвинуть прямо здесь: раньше изменить дату/время задачи было нельзя
@@ -982,6 +1001,13 @@ private fun TaskDetailsDialog(
                 Spacer(Modifier.height(12.dp))
                 TextButton(onClick = onAddReminder, modifier = Modifier.fillMaxWidth()) {
                     Text("Напоминание…")
+                }
+                // Убрать напоминание раньше было нечем ни в приложении, ни в CLI:
+                // можно было только поставить новое поверх старого.
+                if (task.hasReminder) {
+                    TextButton(onClick = onDeleteReminder, modifier = Modifier.fillMaxWidth()) {
+                        Text("Удалить напоминание", color = MaterialTheme.colorScheme.error)
+                    }
                 }
             }
         },

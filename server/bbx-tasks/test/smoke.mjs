@@ -87,6 +87,28 @@ await check("upcoming отдаёт будущее напоминание", async
   if (!r.data.reminders.some((x) => x.id === reminderId)) throw new Error("напоминания нет");
 });
 
+await check("перенос срока снимает напоминание", async () => {
+  const patch = await api("PATCH", `/api/v1/tasks/${created[0]}`, DEVICE, { due_at: "2026-12-02 10:00" });
+  if (patch.status !== 200) throw new Error(JSON.stringify(patch));
+  if (!String(patch.data.due_at).startsWith("2026-12-02T07:00")) throw new Error(`МСК: ${patch.data.due_at}`);
+  const list = await api("GET", `/api/v1/tasks/${created[0]}/reminders`);
+  const pending = list.data.reminders.filter((r) => r.status === "pending");
+  if (pending.length !== 0) throw new Error(`осталось pending: ${pending.length}`);
+});
+
+await check("удаление напоминания вручную", async () => {
+  const made = await api("POST", `/api/v1/tasks/${created[0]}/reminders`, DEVICE, {
+    fire_at: "2026-12-03 09:00",
+    channels: ["local"],
+  });
+  if (made.status !== 201) throw new Error(JSON.stringify(made));
+  const del = await api("DELETE", `/api/v1/reminders/${made.data.id}`, DEVICE);
+  if (del.status !== 200) throw new Error(JSON.stringify(del));
+  const list = await api("GET", `/api/v1/tasks/${created[0]}/reminders`);
+  const row = list.data.reminders.find((r) => r.id === made.data.id);
+  if (!row || row.status !== "cancelled") throw new Error(`статус ${row?.status}`);
+});
+
 await check("глубина подзадач: 7 уровней, 8-й отклоняется", async () => {
   let parent = created[0];
   for (let i = 0; i < 6; i++) {

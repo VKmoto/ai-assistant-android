@@ -179,6 +179,37 @@ object TasksApi {
 
     data class PomodoroStats(val sessions: Int, val seconds: Int)
 
+    data class Reminder(val id: String, val fireAt: String?, val channels: List<String>, val status: String)
+
+    suspend fun reminders(client: OkHttpClient, config: TasksConfig, taskId: String): List<Reminder> =
+        withContext(Dispatchers.IO) {
+            val req = request(config, "/api/v1/tasks/$taskId/reminders").get().build()
+            client.newCall(req).execute().use { res ->
+                val body = res.body?.string().orEmpty()
+                if (!res.isSuccessful) throw IllegalStateException(errorMessage(body) ?: "HTTP ${res.code}")
+                val arr = JSONObject(body).getJSONArray("reminders")
+                (0 until arr.length()).map {
+                    val o = arr.getJSONObject(it)
+                    val chans = o.optJSONArray("channels")
+                    Reminder(
+                        id = o.optString("id"),
+                        fireAt = if (o.isNull("fire_at")) null else o.optString("fire_at"),
+                        channels = (0 until (chans?.length() ?: 0)).map { i -> chans!!.optString(i) },
+                        status = o.optString("status"),
+                    )
+                }
+            }
+        }
+
+    suspend fun deleteReminder(client: OkHttpClient, config: TasksConfig, reminderId: String) =
+        withContext(Dispatchers.IO) {
+            val req = request(config, "/api/v1/reminders/$reminderId").delete().build()
+            client.newCall(req).execute().use { res ->
+                val body = res.body?.string().orEmpty()
+                if (!res.isSuccessful) throw IllegalStateException(errorMessage(body) ?: "HTTP ${res.code}")
+            }
+        }
+
     data class AgentAction(val id: String, val action: String, val entityId: String?, val reason: String?, val undone: Boolean)
 
     suspend fun agentActions(client: OkHttpClient, config: TasksConfig, limit: Int = 20): List<AgentAction> =
