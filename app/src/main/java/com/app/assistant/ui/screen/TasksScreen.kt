@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -111,6 +112,15 @@ fun TasksScreen(
     var newDue by remember { mutableStateOf("") }
     var reminderFor by remember { mutableStateOf<TaskItem?>(null) }
     var reminderAt by remember { mutableStateOf("") }
+    // Каналы выбирает человек: по умолчанию только телефон. «Слать сразу везде» —
+    // плохой дефолт (MAX/почта могут быть лишними для бытовой задачи).
+    var reminderChannels by remember { mutableStateOf(setOf("local")) }
+    val channelOptions = listOf(
+        "local" to "Телефон (уведомление)",
+        "max" to "MAX",
+        "telegram" to "Telegram",
+        "email" to "Email",
+    )
 
     val ready = baseUrl.isNotBlank() && token.isNotBlank()
     val config = TasksConfig(baseUrl, token)
@@ -301,6 +311,7 @@ fun TasksScreen(
             },
             onAddReminder = {
                 reminderAt = ""
+                reminderChannels = setOf("local")
                 reminderFor = selected
             },
             onComplete = {
@@ -331,26 +342,56 @@ fun TasksScreen(
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        "Придёт на телефон, в MAX и на почту.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text("Куда напомнить", style = MaterialTheme.typography.labelLarge)
+                    // Чекбоксы, а не switches: выбор подтверждается кнопкой «Поставить»
+                    // (components.md: checkbox — для одного или нескольких выборов,
+                    // подтверждаемых позже; switch — для немедленного вкл/выкл).
+                    channelOptions.forEach { (id, label) ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().clickable {
+                                reminderChannels = if (reminderChannels.contains(id)) {
+                                    reminderChannels - id
+                                } else {
+                                    reminderChannels + id
+                                }
+                            },
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Checkbox(
+                                checked = reminderChannels.contains(id),
+                                onCheckedChange = { checked ->
+                                    reminderChannels = if (checked) reminderChannels + id else reminderChannels - id
+                                },
+                            )
+                            Text(label, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
                 }
             },
             confirmButton = {
-                TextButton(onClick = {
+                TextButton(
+                    enabled = reminderAt.isNotBlank() && reminderChannels.isNotEmpty(),
+                    onClick = {
                     val task = reminderFor
                     val whenText = reminderAt.trim()
-                    if (task != null && whenText.isNotEmpty()) {
+                    if (task != null && whenText.isNotEmpty() && reminderChannels.isNotEmpty()) {
                         scope.launch {
-                            runCatching { TasksApi.createReminder(client, config, task.id, whenText) }
+                            runCatching {
+                                TasksApi.createReminder(
+                                    client,
+                                    config,
+                                    task.id,
+                                    whenText,
+                                    reminderChannels.toList(),
+                                )
+                            }
                                 .onSuccess { reminderFor = null; selected = null; refreshKey++ }
                                 .onFailure { error = it.message }
                         }
                     }
-                }) { Text("Поставить") }
+                    },
+                ) { Text("Поставить") }
             },
             dismissButton = { TextButton(onClick = { reminderFor = null }) { Text("Отмена") } },
         )
