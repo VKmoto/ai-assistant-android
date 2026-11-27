@@ -122,15 +122,15 @@ fun DateTimeField(
     }
 
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-        Segment(0, "%02d".format(value.day), selected) { selected = it } { bump(0, it) }
+        Segment(0, "%02d".format(value.day), selected, onSelect = { selected = it }, onChange = { bump(0, it) })
         Separator(".")
-        Segment(1, "%02d".format(value.month), selected) { selected = it } { bump(1, it) }
+        Segment(1, "%02d".format(value.month), selected, onSelect = { selected = it }, onChange = { bump(1, it) })
         Separator(".")
-        Segment(2, "%04d".format(value.year), selected) { selected = it } { bump(2, it) }
+        Segment(2, "%04d".format(value.year), selected, onSelect = { selected = it }, onChange = { bump(2, it) })
         Separator(" ")
-        Segment(3, "%02d".format(value.hour), selected) { selected = it } { bump(3, it) }
+        Segment(3, "%02d".format(value.hour), selected, onSelect = { selected = it }, onChange = { bump(3, it) })
         Separator(":")
-        Segment(4, "%02d".format(value.minute), selected) { selected = it } { bump(4, it) }
+        Segment(4, "%02d".format(value.minute), selected, onSelect = { selected = it }, onChange = { bump(4, it) })
     }
 }
 
