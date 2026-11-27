@@ -63,15 +63,24 @@ function newId(prefix: string): string {
 }
 
 /** Кому доставлять уведомления: последний чат владельца в MAX/Telegram. */
-async function ownerChat(): Promise<{ channel: string; chatId: string; chatType: string } | null> {
-  const r = await pool.query<{ channel: string; chat_id: string; chat_type: string }>(
-    `SELECT i.channel, i.chat_id, i.chat_type
+/**
+ * Чат владельца ДЛЯ КОНКРЕТНОГО канала.
+ *
+ * Раньше брался просто «последний чат владельца» без канала. Если последним был MAX,
+ * напоминание с каналами {max,telegram} уходило дважды в MAX (по разу за каждый канал),
+ * а в Telegram не уходило вовсе (жалоба владельца 2026-11-27). Теперь канал — часть
+ * ключа: нет чата в этом канале — этот канал просто пропускается.
+ */
+async function ownerChat(channel: "max" | "telegram"): Promise<{ chatId: string; chatType: string } | null> {
+  const r = await pool.query<{ chat_id: string; chat_type: string }>(
+    `SELECT i.chat_id, i.chat_type
        FROM bbx.inbound_msg i JOIN bbx.person p ON p.id = i.person_id
-      WHERE p.role='owner' AND i.channel IN ('max','telegram')
+      WHERE p.role='owner' AND i.channel = $1
       ORDER BY i.received_at DESC LIMIT 1`,
+    [channel],
   );
   const row = r.rows[0];
-  return row ? { channel: row.channel, chatId: row.chat_id, chatType: row.chat_type } : null;
+  return row ? { chatId: row.chat_id, chatType: row.chat_type } : null;
 }
 
 /** Тихие часы владельца (МСК): "23:00-08:00". */
@@ -238,6 +247,10 @@ const server = createServer((req, res) => {
     if (path === "/api/v1/reminders/due" && method === "GET") {
       return sendJson(res, 200, { reminders: await store.dueRemindersForDevice() });
     }
+    if (path === "/api/v1/reminders/upcoming" && method === "GET") {
+      const hours = Number(url.searchParams.get("hours") ?? 24);
+      return sendJson(res, 200, { reminders: await store.upcomingRemindersForDevice(Number.isFinite(hours) ? hours : 24) });
+    }
 
     const snoozeMatch = /^\/api\/v1\/reminders\/([^/]+)\/snooze$/.exec(path);
     if (snoozeMatch && method === "POST") {
@@ -336,12 +349,14 @@ async function digestTick(): Promise<void> {
     const digest = await store.dueDigest(hhmm, today);
     if (!digest) return;
     const text = await store.digestText(digest.template);
-    const chat = await ownerChat();
-    if (chat && digest.channels.some((c) => c === "max" || c === "telegram")) {
+    for (const channel of ["max", "telegram"] as const) {
+      if (!digest.channels.includes(channel)) continue;
+      const chat = await ownerChat(channel);
+      if (!chat) continue;
       await pool.query(
         `INSERT INTO bbx.outbound_msg (channel, chat_id, chat_type, agent_alias, text, kind)
          VALUES ($1,$2,$3,NULL,$4,'message')`,
-        [chat.channel, chat.chatId, chat.chatType, text],
+        [channel, chat.chatId, chat.chatType, text],
       );
     }
     if (digest.channels.includes("email")) {
@@ -359,17 +374,19 @@ async function reminderTick(): Promise<void> {
   try {
     const due = await store.claimDueReminders(20);
     if (due.length === 0) return;
-    const chat = await ownerChat();
     const quiet = inQuietHours();
     for (const reminder of due) {
       const text = `⏰ Напоминание: ${reminder.title}`;
       for (const channel of reminder.channels) {
-        if ((channel === "max" || channel === "telegram") && chat && !quiet) {
-          await pool.query(
-            `INSERT INTO bbx.outbound_msg (channel, chat_id, chat_type, agent_alias, text, kind)
-             VALUES ($1,$2,$3,NULL,$4,'message')`,
-            [chat.channel, chat.chatId, chat.chatType, text],
-          );
+        if ((channel === "max" || channel === "telegram") && !quiet) {
+          const chat = await ownerChat(channel);
+          if (chat) {
+            await pool.query(
+              `INSERT INTO bbx.outbound_msg (channel, chat_id, chat_type, agent_alias, text, kind)
+               VALUES ($1,$2,$3,NULL,$4,'message')`,
+              [channel, chat.chatId, chat.chatType, text],
+            );
+          }
         }
         if (channel === "email") {
           // Email — исключение из тихих часов (решение владельца), поэтому quiet здесь

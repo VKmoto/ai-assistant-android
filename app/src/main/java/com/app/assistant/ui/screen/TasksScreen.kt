@@ -424,6 +424,18 @@ fun TasksScreen(
                                     reminderChannels.toList(),
                                 )
                             }
+                                .onSuccess {
+                                    // Точный будильник сразу: WorkManager тикает раз в 15 минут,
+                                    // а напоминание должно прозвучать в назначенную минуту.
+                                    if (reminderChannels.contains("local")) {
+                                        com.app.assistant.tasks.ReminderScheduler.scheduleExact(
+                                            context,
+                                            "local_${task.id}_${reminderAt.toIso()}",
+                                            task.title,
+                                            reminderAt.toEpochMillis(),
+                                        )
+                                    }
+                                }
                                 .onSuccess { reminderFor = null; selected = null; refreshKey++ }
                                 .onFailure { e -> e.rethrowIfCancellation(); error = e.message }
                         }

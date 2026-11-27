@@ -3,7 +3,7 @@ Description=Every 2 minutes: send queued task emails
 
 [Timer]
 OnBootSec=2min
-OnUnitActiveSec=2min
+OnUnitActiveSec=1min
 Persistent=true
 
 [Install]

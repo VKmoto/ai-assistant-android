@@ -25,6 +25,15 @@ const { rows } = await pool.query(
 for (const row of rows) {
   try {
     await run("bbx", ["mail", "--subject", row.subject, "--text", row.body], { timeout: 60_000 });
+    // По контракту metafeed «отправлено» — только после `mf mail-outbox --send` с
+    // sent > 0. Раньше письмо ждало их cron до 15 минут; штатная команда отправляет
+    // накопленное сразу (владелец: письмо приходило на 15 минут позже).
+    const sentRun = await run("mf", ["mail-outbox", "--send"], { timeout: 120_000 });
+    const combined = `${sentRun.stdout ?? ""}\n${sentRun.stderr ?? ""}`;
+    const sentCount = Number(/(?:sent|ушло)[^0-9]*(\d+)/i.exec(combined)?.[1] ?? "0");
+    if (sentCount <= 0) {
+      throw new Error(`очередь metafeed не отправила: ${combined.trim().slice(0, 200)}`);
+    }
     await pool.query("UPDATE todo.email_outbox SET status='sent', sent_at=now(), error=NULL WHERE id=$1", [row.id]);
     console.log(JSON.stringify({ ts: new Date().toISOString(), event: "email-sent", id: row.id }));
   } catch (error) {

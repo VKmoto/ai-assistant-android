@@ -1,10 +1,15 @@
 package com.app.assistant.tasks
 
+import android.app.AlarmManager
 import android.app.NotificationChannel
+import android.app.PendingIntent
 import android.app.NotificationManager
 import android.content.Context
+import android.content.BroadcastReceiver
+import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -53,6 +58,68 @@ object ReminderScheduler {
             request,
         )
     }
+
+    /**
+     * Точный будильник на конкретное напоминание.
+     *
+     * WorkManager просыпается раз в 15 минут, поэтому «в 09:00» могло прозвучать на
+     * минуту-две позже (жалоба владельца 2026-11-27). AlarmManager с
+     * setExactAndAllowWhileIdle срабатывает минута в минуту; если система запретила
+     * точные будильники (Android 12+), падаем на setAndAllowWhileIdle — лучше
+     * приблизительно, чем никак.
+     */
+    fun scheduleExact(context: Context, reminderId: String, title: String, fireAtMs: Long) {
+        ensureChannel(context)
+        val manager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val intent = Intent(context, ReminderAlarmReceiver::class.java).apply {
+            putExtra("id", reminderId)
+            putExtra("title", title)
+            action = "bbx.tasks.REMINDER:$reminderId"
+        }
+        val pending = PendingIntent.getBroadcast(
+            context,
+            reminderId.hashCode(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !manager.canScheduleExactAlarms()) {
+                manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, fireAtMs, pending)
+            } else {
+                manager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, fireAtMs, pending)
+            }
+        } catch (e: SecurityException) {
+            manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, fireAtMs, pending)
+        }
+    }
+}
+
+class ReminderAlarmReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        val title = intent.getStringExtra("title") ?: return
+        ReminderScheduler.ensureChannel(context)
+        NotificationManagerCompat.from(context).notify(
+            (intent.getStringExtra("id") ?: title).hashCode(),
+            NotificationCompat.Builder(context, ReminderScheduler.CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_live_modes)
+                .setContentTitle("Напоминание")
+                .setContentText(title)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(title))
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setAutoCancel(true)
+                .build(),
+        )
+    }
+}
+
+class BootReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
+            // После перезагрузки будильники теряются — воркер заново запланирует
+            // точные будильники на будущие напоминания.
+            ReminderScheduler.ensureScheduled(context)
+        }
+    }
 }
 
 class ReminderWorker(
@@ -79,6 +146,14 @@ class ReminderWorker(
                         .setAutoCancel(true)
                         .build(),
                 )
+            }
+            // Точные будильники на будущие напоминания: воркер просыпается редко,
+            // а AlarmManager сработает в нужную минуту.
+            runCatching {
+                TasksApi.upcomingReminders(MainViewModelFactory.okHttpClient, TasksConfig(base, token))
+                    .forEach { r ->
+                        ReminderScheduler.scheduleExact(applicationContext, r.id, r.title, r.fireAtMs)
+                    }
             }
             Result.success()
         }.getOrElse { Result.retry() }

@@ -259,11 +259,8 @@ POST /api/v1/agent-actions/:id/undo
 CLI для агента (`tasks`, как `bbx`): `tasks add`, `tasks list`, `tasks done`, `tasks move`,
 `tasks remind`, `tasks today`, `tasks digest`, `tasks undo`, `tasks actions` — с `--json`.
 
-Приём входящих:
-```
-POST /api/v1/inbox     {source, title, url?, text?, due_at?, filter:{is_task,confidence}}
-```
-Правила «что считать задачей» — конфиг + решение агента; модуль только сохраняет.
+Приём входящих — **отменён** (решение владельца 2026-11-27): задач для inbox нет.
+Endpoint оставлен в коде, но не используется.
 
 ---
 

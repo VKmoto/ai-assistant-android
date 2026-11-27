@@ -56,6 +56,14 @@ data class DateTimeValue(
 
     fun daysInMonth(): Int = daysIn(year, month)
 
+    /** Момент в epoch ms (для точного будильника). Значение — МСК (+03:00). */
+    fun toEpochMillis(): Long = runCatching {
+        val fmt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US).apply {
+            timeZone = TimeZone.getTimeZone("Europe/Moscow")
+        }
+        fmt.parse(toIso().substringBefore("+"))?.time ?: 0L
+    }.getOrDefault(0L)
+
     companion object {
         private val zone = TimeZone.getTimeZone("Europe/Moscow")
 

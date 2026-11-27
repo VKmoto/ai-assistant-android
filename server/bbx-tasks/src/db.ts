@@ -424,6 +424,20 @@ export class Store {
     return full.rows;
   }
 
+  /** Будущие локальные напоминания: приложение ставит на них точные будильники. */
+  async upcomingRemindersForDevice(hours = 24): Promise<Array<{ id: string; task_id: string; title: string; fire_at: string }>> {
+    const r = await this.pool.query<{ id: string; task_id: string; title: string; fire_at: string }>(
+      `SELECT r.id, r.task_id, t.title, r.fire_at::text
+         FROM todo.reminders r JOIN todo.tasks t ON t.id = r.task_id
+        WHERE r.status='pending' AND r.local_sent_at IS NULL
+          AND 'local' = ANY(r.channels)
+          AND r.fire_at > now() AND r.fire_at < now() + make_interval(hours => $1)
+        ORDER BY r.fire_at LIMIT 100`,
+      [Math.max(1, Math.min(168, hours))],
+    );
+    return r.rows;
+  }
+
   /** Закрыть reminder, когда все его каналы отработали. */
   async finishReminderIfDone(id: string): Promise<void> {
     await this.pool.query(

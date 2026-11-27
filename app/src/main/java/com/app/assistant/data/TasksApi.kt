@@ -30,6 +30,9 @@ data class TasksConfig(val baseUrl: String, val token: String)
 /** Напоминание, готовое к показу на телефоне. */
 data class DueReminder(val id: String, val title: String)
 
+/** Будущее напоминание для точного будильника. */
+data class UpcomingReminder(val id: String, val title: String, val fireAtMs: Long)
+
 object TasksApi {
     private val jsonType = "application/json; charset=utf-8".toMediaType()
 
@@ -158,6 +161,33 @@ object TasksApi {
                 PomodoroStats(o.optInt("sessions"), o.optInt("seconds"))
             }
         }
+
+    suspend fun upcomingReminders(client: OkHttpClient, config: TasksConfig, hours: Int = 24): List<UpcomingReminder> =
+        withContext(Dispatchers.IO) {
+            val req = request(config, "/api/v1/reminders/upcoming?hours=$hours").get().build()
+            client.newCall(req).execute().use { res ->
+                val body = res.body?.string().orEmpty()
+                if (!res.isSuccessful) throw IllegalStateException(errorMessage(body) ?: "HTTP ${res.code}")
+                val arr = JSONObject(body).getJSONArray("reminders")
+                (0 until arr.length()).map {
+                    val o = arr.getJSONObject(it)
+                    UpcomingReminder(
+                        id = o.optString("id"),
+                        title = o.optString("title"),
+                        fireAtMs = parseIso(o.optString("fire_at")),
+                    )
+                }.filter { it.fireAtMs > 0 }
+            }
+        }
+
+    private fun parseIso(value: String): Long = runCatching {
+        val parser = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US).apply {
+            timeZone = java.util.TimeZone.getTimeZone("UTC")
+            // API отдаёт «2026-11-27 06:00:00+00» — нормализуем разделитель.
+            isLenient = true
+        }
+        parser.parse(value.replace(" ", "T").substringBefore("+"))?.time ?: 0L
+    }.getOrDefault(0L)
 
     suspend fun dueReminders(client: OkHttpClient, config: TasksConfig): List<DueReminder> =
         withContext(Dispatchers.IO) {
