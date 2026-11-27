@@ -30,6 +30,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
@@ -476,6 +477,7 @@ private fun PomodoroTab(
     var cycle by remember { mutableIntStateOf(settingsRepository.getPomodoroCycle()) }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var stats by remember { mutableStateOf<TasksApi.PomodoroStats?>(null) }
+    var showSounds by remember { mutableStateOf(false) }
 
     val phaseTotal = when (mode) {
         "work" -> 25 * 60
@@ -569,7 +571,7 @@ private fun PomodoroTab(
 
             TomatoButton(
                 diameter = 200.dp,
-                running = sessionId != null,
+                active = sessionId != null,
                 onClick = {
                     if (sessionId == null) {
                         // Тап запускает помодоро целиком: фазы и перерывы идут сами.
@@ -598,6 +600,8 @@ private fun PomodoroTab(
                 }
             }) { Text("Сброс") }
 
+            TextButton(onClick = { showSounds = true }) { Text("Мелодия сигнала") }
+
             stats?.let {
                 Spacer(Modifier.height(12.dp))
                 Text(
@@ -608,10 +612,35 @@ private fun PomodoroTab(
             }
         }
     }
+
+    if (showSounds) {
+        val choices = remember { PomodoroSound.choices(context) }
+        AlertDialog(
+            onDismissRequest = { showSounds = false },
+            title = { Text("Мелодия помодоро") },
+            text = {
+                LazyColumn(modifier = Modifier.height(320.dp)) {
+                    items(choices) { choice ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().clickable {
+                                PomodoroSound.save(context, choice.uri)
+                                PomodoroSound.playUri(context, choice.uri)
+                                showSounds = false
+                            }.padding(vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(choice.title, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showSounds = false }) { Text("Закрыть") } },
+        )
+    }
 }
 
 @Composable
-private fun TomatoButton(diameter: Dp, running: Boolean, onClick: () -> Unit) {
+private fun TomatoButton(diameter: Dp, active: Boolean, onClick: () -> Unit) {
     Box(
         modifier = Modifier.size(diameter).clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
@@ -630,21 +659,15 @@ private fun TomatoButton(diameter: Dp, running: Boolean, onClick: () -> Unit) {
             drawOval(Color(0xFF2E7D32), topLeft = Offset(cx - r * 0.48f, cy - r * 1.22f), size = Size(r * 0.96f, r * 0.46f))
             drawRect(Color(0xFF2E7D32), topLeft = Offset(cx - r * 0.03f, cy - r * 1.05f), size = Size(r * 0.06f, r * 0.30f))
 
-            // play / pause
-            if (running) {
-                val barW = r * 0.12f
-                val barH = r * 0.42f
+            // Значок зависит только от «идёт ли помодоро», не от фазы:
+            // идёт — СТОП (остановит), не идёт — PLAY (запустит).
+            if (active) {
+                val side = r * 0.42f
                 drawRoundRect(
                     Color.White,
-                    topLeft = Offset(cx - barW * 1.6f, cy - barH / 2),
-                    size = Size(barW, barH),
-                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(barW / 2),
-                )
-                drawRoundRect(
-                    Color.White,
-                    topLeft = Offset(cx + barW * 0.6f, cy - barH / 2),
-                    size = Size(barW, barH),
-                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(barW / 2),
+                    topLeft = Offset(cx - side / 2, cy - side / 2),
+                    size = Size(side, side),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(side * 0.16f),
                 )
             } else {
                 val path = Path().apply {
@@ -667,13 +690,27 @@ private fun TaskCard(task: TaskItem, onClick: () -> Unit) {
         modifier = Modifier.fillMaxWidth().clickable { onClick() },
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
-            Text(
-                task.title,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = if (task.priority <= 2) FontWeight.SemiBold else FontWeight.Normal,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    task.title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = if (task.priority <= 2) FontWeight.SemiBold else FontWeight.Normal,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                // Полупрозрачный колокольчик: у задачи есть активное напоминание.
+                // Не кричит, но сразу видно, что напоминание уже стоит.
+                if (task.hasReminder) {
+                    Spacer(Modifier.width(6.dp))
+                    Icon(
+                        imageVector = Icons.Filled.Notifications,
+                        contentDescription = "Есть напоминание",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+            }
             val meta = listOfNotNull(
                 dueLabel(task.dueAt),
                 if (task.priority == 1) "высокий приоритет" else null,

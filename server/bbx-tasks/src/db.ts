@@ -32,6 +32,8 @@ export interface TaskRow {
   completed_at: string | null;
   created_at: string;
   updated_at: string;
+  /** Есть ли у задачи ожидающее напоминание — для колокольчика в карточке. */
+  has_reminder: boolean;
 }
 
 const SCHEMA_SQL = `
@@ -327,9 +329,12 @@ export class Store {
       where += ` AND title ILIKE $${params.length}`;
     }
     const r = await this.pool.query<TaskRow>(
-      `SELECT * FROM todo.tasks WHERE ${where}
-       ORDER BY (status IN ('done','cancelled')), priority, due_at NULLS LAST, created_at
-       LIMIT 500`,
+      `SELECT t.*,
+              EXISTS (SELECT 1 FROM todo.reminders r
+                       WHERE r.task_id = t.id AND r.status = 'pending') AS has_reminder
+         FROM todo.tasks t WHERE ${where.replace(/\b(deleted_at|status|project_id|due_at|parent_id|title)\b/g, "t.$1")}
+        ORDER BY (t.status IN ('done','cancelled')), t.priority, t.due_at NULLS LAST, t.created_at
+        LIMIT 500`,
       params,
     );
     return r.rows;

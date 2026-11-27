@@ -23,6 +23,7 @@ data class TaskItem(
     val dueAt: String?,
     val projectId: String?,
     val description: String?,
+    val hasReminder: Boolean,
 )
 
 data class TasksConfig(val baseUrl: String, val token: String)
@@ -49,6 +50,7 @@ object TasksApi {
         dueAt = if (o.isNull("due_at")) null else o.optString("due_at"),
         projectId = if (o.isNull("project_id")) null else o.optString("project_id"),
         description = if (o.isNull("description")) null else o.optString("description"),
+        hasReminder = o.optBoolean("has_reminder", false),
     )
 
     suspend fun list(client: OkHttpClient, config: TasksConfig, view: String): List<TaskItem> =
