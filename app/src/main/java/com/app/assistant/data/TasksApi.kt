@@ -126,6 +126,26 @@ object TasksApi {
         }
     }
 
+    suspend fun startPomodoro(client: OkHttpClient, config: TasksConfig, taskId: String?, durationSec: Int): String =
+        withContext(Dispatchers.IO) {
+            val payload = JSONObject().put("duration_sec", durationSec)
+            if (taskId != null) payload.put("task_id", taskId)
+            val req = request(config, "/api/v1/pomodoro/start")
+                .post(payload.toString().toRequestBody(jsonType)).build()
+            client.newCall(req).execute().use { res ->
+                val body = res.body?.string().orEmpty()
+                if (!res.isSuccessful) throw IllegalStateException(errorMessage(body) ?: "HTTP ${res.code}")
+                JSONObject(body).optString("id")
+            }
+        }
+
+    suspend fun finishPomodoro(client: OkHttpClient, config: TasksConfig, id: String, completed: Boolean) =
+        withContext(Dispatchers.IO) {
+            val req = request(config, "/api/v1/pomodoro/$id/${if (completed) "finish" else "cancel"}")
+                .post("{}".toRequestBody(jsonType)).build()
+            client.newCall(req).execute().use { it.body?.string() }
+        }
+
     suspend fun dueReminders(client: OkHttpClient, config: TasksConfig): List<DueReminder> =
         withContext(Dispatchers.IO) {
             val req = request(config, "/api/v1/reminders/due").get().build()

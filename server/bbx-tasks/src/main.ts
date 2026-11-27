@@ -259,6 +259,31 @@ const server = createServer((req, res) => {
       return ok ? sendJson(res, 200, { ok: true }) : fail(res, 404, "action not found or already undone");
     }
 
+    // --------------------------------------------------------------- pomodoro
+    if (path === "/api/v1/pomodoro/start" && method === "POST") {
+      const body = JSON.parse(await readBody(req)) as Record<string, unknown>;
+      const duration = typeof body["duration_sec"] === "number" ? (body["duration_sec"] as number) : 25 * 60;
+      const session = await store.startPomodoro({
+        id: newId("pm"),
+        taskId: (body["task_id"] as string | null) ?? null,
+        kind: typeof body["kind"] === "string" ? (body["kind"] as string) : "work",
+        durationSec: Math.max(60, Math.min(3 * 3600, duration)),
+        channels: Array.isArray(body["channels"]) ? (body["channels"] as string[]) : ["local"],
+      });
+      return sendJson(res, 201, session);
+    }
+    const pmDone = /^\/api\/v1\/pomodoro\/([^/]+)\/(finish|cancel)$/.exec(path);
+    if (pmDone && method === "POST") {
+      const session = await store.finishPomodoro(pmDone[1]!, pmDone[2] === "finish" ? "completed" : "cancelled");
+      return session ? sendJson(res, 200, session) : fail(res, 404, "session not found");
+    }
+    if (path === "/api/v1/pomodoro/state" && method === "GET") {
+      return sendJson(res, 200, { session: await store.activePomodoro() });
+    }
+    if (path === "/api/v1/pomodoro/stats" && method === "GET") {
+      return sendJson(res, 200, await store.pomodoroStats(7));
+    }
+
     // ---------------------------------------------------------------- inbox
     if (path === "/api/v1/inbox" && method === "POST") {
       if (!isService) return fail(res, 403, "service token required");

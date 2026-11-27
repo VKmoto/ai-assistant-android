@@ -64,6 +64,7 @@ import com.app.assistant.data.TasksApi
 import com.app.assistant.data.TasksConfig
 import com.app.assistant.repository.SettingsRepository
 import com.app.assistant.viewmodel.MainViewModelFactory
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -116,6 +117,10 @@ fun TasksScreen(
     var newDue by remember { mutableStateOf("") }
     var reminderFor by remember { mutableStateOf<TaskItem?>(null) }
     var reminderAt by remember { mutableStateOf("") }
+    var pomodoroFor by remember { mutableStateOf<TaskItem?>(null) }
+    var pomodoroSeconds by remember { mutableIntStateOf(25 * 60) }
+    var pomodoroRunning by remember { mutableStateOf(false) }
+    var pomodoroId by remember { mutableStateOf<String?>(null) }
     // Каналы выбирает человек: по умолчанию только телефон. «Слать сразу везде» —
     // плохой дефолт (MAX/почта могут быть лишними для бытовой задачи).
     var reminderChannels by remember { mutableStateOf(setOf("local")) }
@@ -144,6 +149,20 @@ fun TasksScreen(
 
     // Фон обязателен: Activity прозрачная (edge-to-edge, как у чата), и без него
     // сквозь экран задач просвечивала домашняя подложка (скриншоты владельца).
+    // Тикаем локально: сервер хранит сессию и итог, а секунды не гоняем по сети.
+    LaunchedEffect(pomodoroRunning, pomodoroFor) {
+        while (pomodoroRunning && pomodoroSeconds > 0) {
+            kotlinx.coroutines.delay(1000)
+            pomodoroSeconds -= 1
+        }
+        if (pomodoroRunning && pomodoroSeconds == 0) {
+            pomodoroRunning = false
+            val id = pomodoroId
+            if (id != null) runCatching { TasksApi.finishPomodoro(client, config, id, true) }
+            pomodoroId = null
+        }
+    }
+
     Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         TopAppBar(
             title = { Text("Задачи") },
@@ -200,7 +219,7 @@ fun TasksScreen(
                         scope.launch {
                             runCatching { TasksApi.move(client, config, task.id, status) }
                                 .onSuccess { refreshKey++ }
-                                .onFailure { error = it.message }
+                                .onFailure { e -> e.rethrowIfCancellation(); error = e.message }
                         }
                     },
                 )
@@ -302,7 +321,7 @@ fun TasksScreen(
                         scope.launch {
                             runCatching { TasksApi.create(client, config, title, newDue.trim().ifEmpty { null }) }
                                 .onSuccess { showAdd = false; refreshKey++ }
-                                .onFailure { error = it.message }
+                                .onFailure { e -> e.rethrowIfCancellation(); error = e.message }
                         }
                     }
                 }) { Text("Создать") }
@@ -321,8 +340,21 @@ fun TasksScreen(
                     scope.launch {
                         runCatching { TasksApi.move(client, config, task.id, status) }
                             .onSuccess { selected = null; refreshKey++ }
-                            .onFailure { error = it.message }
+                            .onFailure { e -> e.rethrowIfCancellation(); error = e.message }
                     }
+                }
+            },
+            onStartPomodoro = {
+                val task = selected
+                scope.launch {
+                    runCatching { TasksApi.startPomodoro(client, config, task?.id, 25 * 60) }
+                        .onSuccess { id ->
+                            pomodoroId = id
+                            pomodoroSeconds = 25 * 60
+                            pomodoroRunning = true
+                            pomodoroFor = task
+                        }
+                        .onFailure { e -> e.rethrowIfCancellation(); error = e.message }
                 }
             },
             onAddReminder = {
@@ -337,9 +369,48 @@ fun TasksScreen(
                     scope.launch {
                         runCatching { TasksApi.complete(client, config, task.id) }
                             .onSuccess { selected = null; refreshKey++ }
-                            .onFailure { error = it.message }
+                            .onFailure { e -> e.rethrowIfCancellation(); error = e.message }
                     }
                 }
+            },
+        )
+    }
+
+    if (pomodoroFor != null || pomodoroId != null) {
+        AlertDialog(
+            onDismissRequest = { },
+            title = { Text("Помодоро") },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        "%02d:%02d".format(pomodoroSeconds / 60, pomodoroSeconds % 60),
+                        style = MaterialTheme.typography.displaySmall,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Text(
+                        pomodoroFor?.title ?: "Без задачи",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { pomodoroRunning = !pomodoroRunning }) {
+                    Text(if (pomodoroRunning) "Пауза" else "Продолжить")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    val id = pomodoroId
+                    pomodoroRunning = false
+                    pomodoroId = null
+                    pomodoroFor = null
+                    pomodoroSeconds = 25 * 60
+                    if (id != null) scope.launch {
+                        runCatching { TasksApi.finishPomodoro(client, config, id, false) }
+                            .onFailure { e -> e.rethrowIfCancellation() }
+                    }
+                }) { Text("Стоп") }
             },
         )
     }
@@ -404,7 +475,7 @@ fun TasksScreen(
                                 )
                             }
                                 .onSuccess { reminderFor = null; selected = null; refreshKey++ }
-                                .onFailure { error = it.message }
+                                .onFailure { e -> e.rethrowIfCancellation(); error = e.message }
                         }
                     }
                     },
@@ -527,6 +598,7 @@ private fun TaskDetailsDialog(
     onDismiss: () -> Unit,
     onMove: (String) -> Unit,
     onAddReminder: () -> Unit,
+    onStartPomodoro: () -> Unit,
     onComplete: () -> Unit,
 ) {
     AlertDialog(
@@ -541,6 +613,9 @@ private fun TaskDetailsDialog(
                 Text("Статус: ${statusLabel(task.status)}", style = MaterialTheme.typography.bodySmall)
                 dueLabel(task.dueAt)?.let { Text("Срок: $it", style = MaterialTheme.typography.bodySmall) }
                 Spacer(Modifier.height(12.dp))
+                TextButton(onClick = onStartPomodoro, modifier = Modifier.fillMaxWidth()) {
+                    Text("Помодоро 25:00")
+                }
                 TextButton(onClick = onAddReminder, modifier = Modifier.fillMaxWidth()) {
                     Text("Напоминание…")
                 }
@@ -555,6 +630,18 @@ private fun TaskDetailsDialog(
         confirmButton = { TextButton(onClick = onComplete) { Text("Готово") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Закрыть") } },
     )
+}
+
+/**
+ * Отмена корутины — не ошибка.
+ *
+ * `rememberCoroutineScope` отменяется, когда экран уходит из композиции, и сообщение
+ * отмены («The coroutine scope left the composition») попадало в error-строку как
+ * красная ошибка, а список при этом затирался (баг владельца 2026-11-27). Отмену
+ * прокидываем дальше, показываем только настоящие сбои.
+ */
+private fun Throwable.rethrowIfCancellation() {
+    if (this is CancellationException) throw this
 }
 
 /** Текущее время владельца в формате ввода: «27.11.2026 09:00» (МСК). */

@@ -563,6 +563,55 @@ export class Store {
     });
   }
 
+  // --------------------------------------------------------------- pomodoro
+  async startPomodoro(input: { id: string; taskId: string | null; kind: string; durationSec: number; channels: string[] }): Promise<unknown> {
+    // Одна активная сессия: предыдущую незавершённую закрываем как cancelled, иначе
+    // статистика посчитает одно и то же время дважды.
+    await this.pool.query(
+      "UPDATE todo.pomodoro_sessions SET status='cancelled', ended_at=now() WHERE status IN ('running','paused')",
+    );
+    const r = await this.pool.query(
+      `INSERT INTO todo.pomodoro_sessions (id, task_id, kind, status, started_at, duration_sec, remaining_sec, channels)
+       VALUES ($1,$2,$3,'running',now(),$4,$4,$5) RETURNING *`,
+      [input.id, input.taskId, input.kind, input.durationSec, input.channels],
+    );
+    return r.rows[0];
+  }
+
+  async finishPomodoro(id: string, status: 'completed' | 'cancelled'): Promise<unknown | null> {
+    const r = await this.pool.query(
+      `UPDATE todo.pomodoro_sessions
+          SET status=$2, ended_at=now(),
+              duration_sec = GREATEST(1, EXTRACT(EPOCH FROM (now() - started_at))::int)
+        WHERE id=$1 AND status IN ('running','paused')
+        RETURNING *`,
+      [id, status],
+    );
+    return r.rows[0] ?? null;
+  }
+
+  async activePomodoro(): Promise<unknown | null> {
+    const r = await this.pool.query(
+      `SELECT *, EXTRACT(EPOCH FROM (now() - started_at))::int AS elapsed_sec
+         FROM todo.pomodoro_sessions
+        WHERE status IN ('running','paused')
+        ORDER BY started_at DESC LIMIT 1`,
+    );
+    return r.rows[0] ?? null;
+  }
+
+  async pomodoroStats(days = 7): Promise<unknown> {
+    const r = await this.pool.query(
+      `SELECT count(*)::int AS sessions,
+              coalesce(sum(duration_sec),0)::int AS seconds
+         FROM todo.pomodoro_sessions
+        WHERE kind='work' AND status='completed'
+          AND started_at > now() - make_interval(days => $1)`,
+      [days],
+    );
+    return r.rows[0] ?? { sessions: 0, seconds: 0 };
+  }
+
   async health(): Promise<{ ok: boolean; detail: string }> {
     try {
       const r = await this.pool.query<{ n: string }>("SELECT count(*)::text AS n FROM todo.tasks WHERE deleted_at IS NULL");
