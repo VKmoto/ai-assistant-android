@@ -2,6 +2,10 @@ package com.app.assistant.ui.screen
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.input.pointer.pointerInput
+import kotlin.math.roundToInt
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -189,7 +193,17 @@ fun TasksScreen(
             } else if (tasks.isEmpty()) {
                 Text("Пусто", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp))
             } else if (kanban) {
-                KanbanBoard(tasks = tasks, onTaskClick = { selected = it })
+                KanbanBoard(
+                    tasks = tasks,
+                    onTaskClick = { selected = it },
+                    onMove = { task, status ->
+                        scope.launch {
+                            runCatching { TasksApi.move(client, config, task.id, status) }
+                                .onSuccess { refreshKey++ }
+                                .onFailure { error = it.message }
+                        }
+                    },
+                )
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
@@ -212,7 +226,9 @@ fun TasksScreen(
         ) {
             FloatingActionButton(onClick = {
                 newTitle = ""
-                newDue = ""
+                // Текущее время владельца (МСК) подставлено, чтобы в большинстве случаев
+                // достаточно было поправить одну цифру, а не вводить всё с нуля.
+                newDue = nowMsk()
                 showAdd = true
             }) {
                 Icon(Icons.Filled.Add, contentDescription = "Новая задача")
@@ -310,7 +326,8 @@ fun TasksScreen(
                 }
             },
             onAddReminder = {
-                reminderAt = ""
+                // По умолчанию — срок самой задачи (если он есть), иначе текущее время.
+                reminderAt = selected?.dueAt?.let { mskFromIso(it) } ?: nowMsk()
                 reminderChannels = setOf("local")
                 reminderFor = selected
             },
@@ -427,7 +444,11 @@ private fun TaskCard(task: TaskItem, onClick: () -> Unit) {
 }
 
 @Composable
-private fun KanbanBoard(tasks: List<TaskItem>, onTaskClick: (TaskItem) -> Unit) {
+private fun KanbanBoard(
+    tasks: List<TaskItem>,
+    onTaskClick: (TaskItem) -> Unit,
+    onMove: (TaskItem, String) -> Unit,
+) {
     // Четыре равные колонки на телефоне давали ~70 dp — текст рвался по буквам
     // («Тест email-н апом...»). Колонки фиксированной ширины, канбан прокручивается
     // по горизонтали — как в обычных канбан-досках.
@@ -449,12 +470,54 @@ private fun KanbanBoard(tasks: List<TaskItem>, onTaskClick: (TaskItem) -> Unit) 
                     modifier = Modifier.padding(vertical = 6.dp),
                 )
                 columnTasks.forEach { task ->
-                    Box(modifier = Modifier.padding(bottom = 6.dp)) {
-                        TaskCard(task = task, onClick = { onTaskClick(task) })
-                    }
+                    DraggableTaskCard(
+                        task = task,
+                        onTaskClick = { onTaskClick(task) },
+                        onDrop = { steps ->
+                            // Карточку тащат влево/вправо: каждые 260 dp (ширина колонки)
+                            // — одна колонка статуса. Так drag работает и в горизонтально
+                            // прокручиваемом канбане, где координаты колонок уезжают.
+                            val index = STATUS_COLUMNS.indexOfFirst { it.first == task.status }
+                            val target = (index + steps).coerceIn(0, STATUS_COLUMNS.lastIndex)
+                            if (target != index) onMove(task, STATUS_COLUMNS[target].first)
+                        },
+                    )
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun DraggableTaskCard(
+    task: TaskItem,
+    onTaskClick: () -> Unit,
+    onDrop: (steps: Int) -> Unit,
+) {
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val columnPx = with(density) { 260.dp.toPx() }
+    var offsetX by remember { mutableStateOf(0f) }
+
+    Box(
+        modifier = Modifier
+            .padding(bottom = 6.dp)
+            .offset { androidx.compose.ui.unit.IntOffset(offsetX.roundToInt(), 0) }
+            .pointerInput(task.id, task.status) {
+                detectDragGesturesAfterLongPress(
+                    onDrag = { change, dragAmount ->
+                        change.consume()
+                        offsetX += dragAmount.x
+                    },
+                    onDragEnd = {
+                        val steps = if (kotlin.math.abs(offsetX) < columnPx * 0.4f) 0 else (offsetX / columnPx).roundToInt()
+                        offsetX = 0f
+                        onDrop(steps)
+                    },
+                    onDragCancel = { offsetX = 0f },
+                )
+            },
+    ) {
+        TaskCard(task = task, onClick = onTaskClick)
     }
 }
 
@@ -493,6 +556,26 @@ private fun TaskDetailsDialog(
         dismissButton = { TextButton(onClick = onDismiss) { Text("Закрыть") } },
     )
 }
+
+/** Текущее время владельца в формате ввода: «27.11.2026 09:00» (МСК). */
+private fun nowMsk(): String {
+    val fmt = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.US).apply {
+        timeZone = TimeZone.getTimeZone("Europe/Moscow")
+    }
+    return fmt.format(Date())
+}
+
+/** Срок задачи (UTC ISO) → «27.11.2026 09:00» МСК для поля ввода. */
+private fun mskFromIso(iso: String): String? = runCatching {
+    val parser = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
+        timeZone = TimeZone.getTimeZone("UTC")
+    }
+    val date = parser.parse(iso) ?: return null
+    val fmt = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.US).apply {
+        timeZone = TimeZone.getTimeZone("Europe/Moscow")
+    }
+    fmt.format(date)
+}.getOrNull()
 
 private fun statusLabel(status: String): String = STATUS_COLUMNS.firstOrNull { it.first == status }?.second ?: status
 
