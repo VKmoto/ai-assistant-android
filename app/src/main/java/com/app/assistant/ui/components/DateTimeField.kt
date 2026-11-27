@@ -13,6 +13,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -130,21 +131,24 @@ fun DateTimeField(
     // начатый на нём, до поля не доходил — после выбора позиции тапом свайп не менял
     // значение (баг владельца 2026-11-27).
     val centers = remember { FloatArray(5) }
+    var rowLeft by remember { mutableStateOf(0f) }
 
     // +20% к прежней скорости: 44 dp → 37 dp на шаг.
     val stepPx = with(LocalDensity.current) { 37.dp.toPx() }
 
     Row(
         modifier = modifier
+            .onGloballyPositioned { rowLeft = it.positionInRoot().x }
             // Свайп работает в любом месте поля, а не только по выделенной позиции:
             // позиция уже выбрана тапом, и целиться в неё пальцем не нужно.
             .pointerInput(Unit) {
                 detectTapGestures { offset ->
                     // Ближайший центр сегмента — и есть выбранная позиция.
+                    val absoluteX = rowLeft + offset.x
                     var best = 0
                     var bestDist = Float.MAX_VALUE
                     centers.forEachIndexed { i, c ->
-                        val d = kotlin.math.abs(offset.x - c)
+                        val d = kotlin.math.abs(absoluteX - c)
                         if (d < bestDist) { bestDist = d; best = i }
                     }
                     selected = best
@@ -202,7 +206,7 @@ private fun Segment(index: Int, text: String, selected: Int, onCenter: (Float) -
             .background(highlight, RoundedCornerShape(8.dp))
             .padding(horizontal = 6.dp, vertical = 8.dp)
             .onGloballyPositioned { coords ->
-                onCenter(coords.positionInParent().x + coords.size.width / 2f)
+                onCenter(coords.positionInRoot().x + coords.size.width / 2f)
             },
     ) {
         Text(
