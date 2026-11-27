@@ -466,7 +466,7 @@ private fun PomodoroTab(
 
     val phaseTotal = when (mode) {
         "work" -> 25 * 60
-        "long_break" -> 15 * 60
+        "long_break" -> 20 * 60
         else -> 5 * 60
     }
     val remaining = if (sessionId == null) {
@@ -494,17 +494,18 @@ private fun PomodoroTab(
         if (id != null) runCatching { TasksApi.finishPomodoro(client, config, id, completed) }
         when {
             mode == "work" -> {
-                // Стандартный цикл: 25 работы → 5 отдыха; после каждого 4-го — 15.
+                // Цикл идёт сам: 25 работы → 5 отдыха, после 4-го — 20 минут.
                 val next = cycle + 1
                 PomodoroSound.play(context)
                 val breakPhase = if (next % 4 == 0) "long_break" else "short_break"
                 persist(null, 0L, breakPhase, next)
-                startPhase(breakPhase, if (breakPhase == "long_break") 15 * 60 else 5 * 60)
+                startPhase(breakPhase, if (breakPhase == "long_break") 20 * 60 else 5 * 60)
             }
             else -> {
-                // Перерыв закончился — ждём тапа на новую работу.
+                // Перерыв закончился — сразу следующая работа, без тапа.
                 PomodoroSound.play(context)
-                persist(null, 0L, "work", cycle)
+                persist(null, 0L, "work", if (mode == "long_break") 0 else cycle)
+                startPhase("work", 25 * 60)
             }
         }
         runCatching { stats = TasksApi.pomodoroStats(client, config) }
@@ -558,11 +559,18 @@ private fun PomodoroTab(
                 running = sessionId != null,
                 onClick = {
                     if (sessionId == null) {
-                        // Тап начинает фазу работы.
-                        scope.launch { startPhase("work", 25 * 60) }
+                        // Тап запускает помодоро целиком: фазы и перерывы идут сами.
+                        scope.launch {
+                            persist(null, 0L, "work", 0)
+                            startPhase("work", 25 * 60)
+                        }
                     } else {
-                        // Тап завершает текущую фазу досрочно.
-                        scope.launch { finishPhase(false) }
+                        // Второй тап выключает помодоро полностью.
+                        scope.launch {
+                            val id = sessionId
+                            persist(null, 0L, "work", 0)
+                            if (id != null) runCatching { TasksApi.finishPomodoro(client, config, id, false) }
+                        }
                     }
                 },
             )
