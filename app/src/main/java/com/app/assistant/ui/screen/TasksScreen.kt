@@ -62,6 +62,8 @@ import androidx.compose.ui.unit.dp
 import com.app.assistant.data.TaskItem
 import com.app.assistant.data.TasksApi
 import com.app.assistant.data.TasksConfig
+import com.app.assistant.ui.components.DateTimeField
+import com.app.assistant.ui.components.DateTimeValue
 import com.app.assistant.repository.SettingsRepository
 import com.app.assistant.viewmodel.MainViewModelFactory
 import kotlinx.coroutines.CancellationException
@@ -114,9 +116,9 @@ fun TasksScreen(
     var settingsUrl by remember { mutableStateOf("") }
     var settingsToken by remember { mutableStateOf("") }
     var newTitle by remember { mutableStateOf("") }
-    var newDue by remember { mutableStateOf("") }
+    var newDue by remember { mutableStateOf(DateTimeValue.nowMsk()) }
     var reminderFor by remember { mutableStateOf<TaskItem?>(null) }
-    var reminderAt by remember { mutableStateOf("") }
+    var reminderAt by remember { mutableStateOf(DateTimeValue.nowMsk()) }
     var pomodoroFor by remember { mutableStateOf<TaskItem?>(null) }
     var pomodoroSeconds by remember { mutableIntStateOf(25 * 60) }
     var pomodoroRunning by remember { mutableStateOf(false) }
@@ -247,7 +249,7 @@ fun TasksScreen(
                 newTitle = ""
                 // Текущее время владельца (МСК) подставлено, чтобы в большинстве случаев
                 // достаточно было поправить одну цифру, а не вводить всё с нуля.
-                newDue = nowMsk()
+                newDue = DateTimeValue.nowMsk()
                 showAdd = true
             }) {
                 Icon(Icons.Filled.Add, contentDescription = "Новая задача")
@@ -305,13 +307,8 @@ fun TasksScreen(
                         modifier = Modifier.fillMaxWidth(),
                     )
                     Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = newDue,
-                        onValueChange = { newDue = it },
-                        label = { Text("Срок (27.11.2026 09:00, МСК)") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
+                    Text("Срок (МСК): тап — выбрать, свайп ↑↓ — изменить", style = MaterialTheme.typography.labelMedium)
+                    DateTimeField(value = newDue, onValueChange = { newDue = it })
                 }
             },
             confirmButton = {
@@ -319,7 +316,7 @@ fun TasksScreen(
                     val title = newTitle.trim()
                     if (title.isNotEmpty()) {
                         scope.launch {
-                            runCatching { TasksApi.create(client, config, title, newDue.trim().ifEmpty { null }) }
+                            runCatching { TasksApi.create(client, config, title, newDue.toIso()) }
                                 .onSuccess { showAdd = false; refreshKey++ }
                                 .onFailure { e -> e.rethrowIfCancellation(); error = e.message }
                         }
@@ -359,7 +356,7 @@ fun TasksScreen(
             },
             onAddReminder = {
                 // По умолчанию — срок самой задачи (если он есть), иначе текущее время.
-                reminderAt = selected?.dueAt?.let { mskFromIso(it) } ?: nowMsk()
+                reminderAt = selected?.dueAt?.let { DateTimeValue.fromIso(it) } ?: DateTimeValue.nowMsk()
                 reminderChannels = setOf("local")
                 reminderFor = selected
             },
@@ -423,13 +420,8 @@ fun TasksScreen(
                 Column {
                     Text(reminderFor!!.title, style = MaterialTheme.typography.bodyMedium)
                     Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = reminderAt,
-                        onValueChange = { reminderAt = it },
-                        label = { Text("Когда (27.11.2026 09:00, МСК)") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
+                    Text("Когда (МСК): тап — выбрать, свайп ↑↓ — изменить", style = MaterialTheme.typography.labelMedium)
+                    DateTimeField(value = reminderAt, onValueChange = { reminderAt = it })
                     Spacer(Modifier.height(8.dp))
                     Text("Куда напомнить", style = MaterialTheme.typography.labelLarge)
                     // Чекбоксы, а не switches: выбор подтверждается кнопкой «Поставить»
@@ -459,18 +451,17 @@ fun TasksScreen(
             },
             confirmButton = {
                 TextButton(
-                    enabled = reminderAt.isNotBlank() && reminderChannels.isNotEmpty(),
+                    enabled = reminderChannels.isNotEmpty(),
                     onClick = {
                     val task = reminderFor
-                    val whenText = reminderAt.trim()
-                    if (task != null && whenText.isNotEmpty() && reminderChannels.isNotEmpty()) {
+                    if (task != null && reminderChannels.isNotEmpty()) {
                         scope.launch {
                             runCatching {
                                 TasksApi.createReminder(
                                     client,
                                     config,
                                     task.id,
-                                    whenText,
+                                    reminderAt.toIso(),
                                     reminderChannels.toList(),
                                 )
                             }
@@ -643,26 +634,6 @@ private fun TaskDetailsDialog(
 private fun Throwable.rethrowIfCancellation() {
     if (this is CancellationException) throw this
 }
-
-/** Текущее время владельца в формате ввода: «27.11.2026 09:00» (МСК). */
-private fun nowMsk(): String {
-    val fmt = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.US).apply {
-        timeZone = TimeZone.getTimeZone("Europe/Moscow")
-    }
-    return fmt.format(Date())
-}
-
-/** Срок задачи (UTC ISO) → «27.11.2026 09:00» МСК для поля ввода. */
-private fun mskFromIso(iso: String): String? = runCatching {
-    val parser = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
-        timeZone = TimeZone.getTimeZone("UTC")
-    }
-    val date = parser.parse(iso) ?: return null
-    val fmt = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.US).apply {
-        timeZone = TimeZone.getTimeZone("Europe/Moscow")
-    }
-    fmt.format(date)
-}.getOrNull()
 
 private fun statusLabel(status: String): String = STATUS_COLUMNS.firstOrNull { it.first == status }?.second ?: status
 
