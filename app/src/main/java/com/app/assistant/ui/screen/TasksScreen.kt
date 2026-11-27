@@ -261,7 +261,7 @@ fun TasksScreen(
                     OutlinedTextField(
                         value = newDue,
                         onValueChange = { newDue = it },
-                        label = { Text("Срок (2026-11-27 09:00, МСК)") },
+                        label = { Text("Срок (27.11.2026 09:00, МСК)") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )

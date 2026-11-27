@@ -20,6 +20,9 @@ import java.net.URL
 class AssistantApp : Application() {
     override fun onCreate() {
         super.onCreate()
+        // Локальные напоминания: WorkManager просыпается раз в 15 минут и забирает
+        // due-напоминания из bbx-tasks. Планируем один раз при старте приложения.
+        runCatching { com.app.assistant.tasks.ReminderScheduler.ensureScheduled(this) }
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, error ->
             // Сеть на главном потоке Android запрещает (NetworkOnMainThreadException),

@@ -112,6 +112,10 @@ create table if not exists todo.reminders (
   created_at timestamptz not null default now()
 );
 create index if not exists reminders_due on todo.reminders(fire_at) where status = 'pending';
+-- Каналы доставляются независимо: приложение (local) и воркер (max/telegram/email).
+-- Без отдельных отметок воркер помечал строку sent до того, как телефон её заберёт.
+alter table todo.reminders add column if not exists local_sent_at timestamptz;
+alter table todo.reminders add column if not exists remote_sent_at timestamptz;
 
 create table if not exists todo.pomodoro_sessions (
   id text primary key,
@@ -382,15 +386,47 @@ export class Store {
     return r.rows[0];
   }
 
+  /**
+   * Напоминания для телефона.
+   *
+   * Отметка `local_sent_at` отдельная: воркер (max/telegram/email) и приложение
+   * доставляют параллельно, и общий status='sent' означал бы, что телефон уже не
+   * получит напоминание, если воркер успел первым (он тикает каждые 15 с, телефон — реже).
+   */
   async dueRemindersForDevice(limit = 50): Promise<unknown[]> {
-    const r = await this.pool.query(
-      `SELECT r.*, t.title FROM todo.reminders r JOIN todo.tasks t ON t.id = r.task_id
-       WHERE r.status = 'pending' AND r.fire_at <= now()
-         AND 'local' = ANY(r.channels)
-       ORDER BY r.fire_at LIMIT $1`,
+    const r = await this.pool.query<{ id: string }>(
+      `UPDATE todo.reminders r SET local_sent_at = now()
+        WHERE r.id IN (
+          SELECT id FROM todo.reminders
+           WHERE status = 'pending' AND fire_at <= now()
+             AND 'local' = ANY(channels) AND local_sent_at IS NULL
+           ORDER BY fire_at LIMIT $1
+           FOR UPDATE SKIP LOCKED)
+       RETURNING r.id`,
       [limit],
     );
-    return r.rows;
+    const ids = r.rows.map((row) => row.id);
+    if (ids.length === 0) return [];
+    for (const id of ids) {
+      await this.finishReminderIfDone(id);
+    }
+    const full = await this.pool.query(
+      `SELECT r.*, t.title FROM todo.reminders r JOIN todo.tasks t ON t.id = r.task_id WHERE r.id = ANY($1::text[])`,
+      [ids],
+    );
+    return full.rows;
+  }
+
+  /** Закрыть reminder, когда все его каналы отработали. */
+  async finishReminderIfDone(id: string): Promise<void> {
+    await this.pool.query(
+      `UPDATE todo.reminders
+          SET status = 'sent', sent_at = coalesce(sent_at, now())
+        WHERE id = $1
+          AND (remote_sent_at IS NOT NULL OR 'local' <> ALL(channels))
+          AND (local_sent_at IS NOT NULL OR 'local' <> ALL(channels))`,
+      [id],
+    );
   }
 
   /**
@@ -398,18 +434,23 @@ export class Store {
    * SKIP LOCKED вместо Redis: один воркер, но рестарт и параллельный запуск безопасны.
    */
   async claimDueReminders(limit = 20): Promise<Array<{ id: string; task_id: string; channels: string[]; title: string }>> {
+    // Только «внешние» каналы: local забирает приложение, и если воркер закроет
+    // строку целиком, телефон её уже не увидит.
     const r = await this.pool.query<{ id: string; task_id: string; channels: string[]; title: string }>(
       `WITH due AS (
          SELECT r.id FROM todo.reminders r
           WHERE r.status = 'pending' AND r.fire_at <= now()
+            AND r.remote_sent_at IS NULL
+            AND r.channels && ARRAY['max','telegram','email']::text[]
           FOR UPDATE SKIP LOCKED LIMIT $1
        )
-       UPDATE todo.reminders rem SET status = 'sent', sent_at = now(), attempts = attempts + 1
+       UPDATE todo.reminders rem SET remote_sent_at = now(), attempts = attempts + 1
         FROM due, todo.tasks t
        WHERE rem.id = due.id AND t.id = rem.task_id
        RETURNING rem.id, rem.task_id, rem.channels, t.title`,
       [limit],
     );
+    for (const row of r.rows) await this.finishReminderIfDone(row.id);
     return r.rows;
   }
 

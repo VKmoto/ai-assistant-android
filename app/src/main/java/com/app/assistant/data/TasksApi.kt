@@ -27,6 +27,9 @@ data class TaskItem(
 
 data class TasksConfig(val baseUrl: String, val token: String)
 
+/** Напоминание, готовое к показу на телефоне. */
+data class DueReminder(val id: String, val title: String)
+
 object TasksApi {
     private val jsonType = "application/json; charset=utf-8".toMediaType()
 
@@ -56,6 +59,20 @@ object TasksApi {
             }
         }
 
+    /**
+     * «27.11.2026 09:00» (как вводит человек, МСК) → ISO с +03:00.
+     * API и база живут в UTC, а человек пишет дату в привычном формате; конвертация
+     * здесь, чтобы формат ввода не протекал в модель.
+     */
+    private fun toIsoOrNull(raw: String?): String? {
+        val v = raw?.trim().orEmpty()
+        if (v.isEmpty()) return null
+        val m = Regex("""^(\d{2})\.(\d{2})\.(\d{4})(?:[ ,]+(\d{1,2}):(\d{2}))?$""").find(v)
+            ?: return v // уже ISO или другой формат — отдаём как есть
+        val (d, mo, y, h, mi) = m.destructured
+        return "%s-%s-%sT%02d:%s:00+03:00".format(y, mo, d, h.ifEmpty { "0" }.toInt(), mi.ifEmpty { "00" })
+    }
+
     suspend fun create(
         client: OkHttpClient,
         config: TasksConfig,
@@ -64,7 +81,7 @@ object TasksApi {
         priority: Int? = null,
     ): TaskItem = withContext(Dispatchers.IO) {
         val payload = JSONObject().put("title", title)
-        if (dueAt != null) payload.put("due_at", dueAt)
+        toIsoOrNull(dueAt)?.let { payload.put("due_at", it) }
         if (priority != null) payload.put("priority", priority)
         val req = request(config, "/api/v1/tasks")
             .post(payload.toString().toRequestBody(jsonType))
@@ -86,6 +103,20 @@ object TasksApi {
                 val body = res.body?.string().orEmpty()
                 if (!res.isSuccessful) throw IllegalStateException(errorMessage(body) ?: "HTTP ${res.code}")
                 parseTask(JSONObject(body))
+            }
+        }
+
+    suspend fun dueReminders(client: OkHttpClient, config: TasksConfig): List<DueReminder> =
+        withContext(Dispatchers.IO) {
+            val req = request(config, "/api/v1/reminders/due").get().build()
+            client.newCall(req).execute().use { res ->
+                val body = res.body?.string().orEmpty()
+                if (!res.isSuccessful) throw IllegalStateException(errorMessage(body) ?: "HTTP ${res.code}")
+                val arr = JSONObject(body).getJSONArray("reminders")
+                (0 until arr.length()).map {
+                    val o = arr.getJSONObject(it)
+                    DueReminder(o.optString("id"), o.optString("title"))
+                }
             }
         }
 

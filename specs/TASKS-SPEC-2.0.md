@@ -271,8 +271,10 @@ POST /api/v1/inbox     {source, title, url?, text?, due_at?, filter:{is_task,con
 
 - Планировщик `bbx-tasks`: каждые 15 с `SELECT ... WHERE status='pending' AND fire_at <= now() FOR UPDATE SKIP LOCKED`.
 - Каналы:
-  - **local** — приложение при открытии/по WorkManager забирает due-напоминания и показывает
-    локальное уведомление; для точного времени — AlarmManager с `setExactAndAllowWhileIdle`.
+  - **local** — WorkManager раз в 15 минут забирает `GET /api/v1/reminders/due` и показывает
+    системное уведомление (канал «Напоминания задач»). Сервер отмечает `local_sent_at`
+    отдельно от `remote_sent_at`, поэтому воркер мессенджеров не «съедает» напоминание
+    до телефона. Точность — до 15 минут; AlarmManager добавим при необходимости.
   - **max / telegram** — модуль пишет `bbx.outbound_msg` (channel/chat_id владельца), доставляет роутер.
   - **email** — включён по умолчанию. Сервис (bbx) кладёт письмо в `todo.email_outbox`,
   root-таймер `bbx-tasks-email.timer` отправляет через `bbx mail` (очередь metafeed).

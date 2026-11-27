@@ -139,6 +139,13 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         allowOnLockScreen()
         enableEdgeToEdge()
+        // Android 13+: без разрешения на уведомления локальные напоминания не покажутся.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 105)
+        }
         
         textToSpeechManager = com.app.assistant.tts.TtsEngineSelector(
             context = this,

@@ -107,6 +107,9 @@ android {
 }
 
 dependencies {
+    // Локальные напоминания: WorkManager будит приложение раз в 15 минут и забирает
+    // due-напоминания из bbx-tasks. Это «push без Google» — решение владельца.
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
