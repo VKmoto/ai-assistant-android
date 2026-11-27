@@ -146,6 +146,19 @@ object TasksApi {
             client.newCall(req).execute().use { it.body?.string() }
         }
 
+    data class PomodoroStats(val sessions: Int, val seconds: Int)
+
+    suspend fun pomodoroStats(client: OkHttpClient, config: TasksConfig): PomodoroStats =
+        withContext(Dispatchers.IO) {
+            val req = request(config, "/api/v1/pomodoro/stats").get().build()
+            client.newCall(req).execute().use { res ->
+                val body = res.body?.string().orEmpty()
+                if (!res.isSuccessful) throw IllegalStateException(errorMessage(body) ?: "HTTP ${res.code}")
+                val o = JSONObject(body)
+                PomodoroStats(o.optInt("sessions"), o.optInt("seconds"))
+            }
+        }
+
     suspend fun dueReminders(client: OkHttpClient, config: TasksConfig): List<DueReminder> =
         withContext(Dispatchers.IO) {
             val req = request(config, "/api/v1/reminders/due").get().build()

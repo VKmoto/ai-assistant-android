@@ -14,6 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -101,36 +102,66 @@ fun DateTimeField(
     onValueChange: (DateTimeValue) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // Выбранная позиция: тап выбирает, свайп меняет именно её.
     var selected by remember { mutableIntStateOf(0) }
+    // pointerInput живёт дольше одной рекомпозиции, поэтому замыкание на `value`
+    // «застревало»: после первого шага дальнейшие считались от старого значения и
+    // перезаписывали его — свайп останавливался через пару итераций.
+    val current by rememberUpdatedState(value)
+    val change by rememberUpdatedState(onValueChange)
 
     fun bump(index: Int, delta: Int) {
-        val step = if (index == 4) 15 else 1
-        val v = value
-        when (index) {
-            // День ограничен длиной месяца: 31.02 не появляется.
-            0 -> {
-                val dim = v.daysInMonth()
-                val d = ((v.day - 1 + delta).mod(dim)) + 1
-                onValueChange(v.copy(day = d))
+        val v = current
+        val newValue = when (index) {
+            0 -> v.copy(day = ((v.day - 1 + delta).mod(v.daysInMonth())) + 1)
+            1 -> {
+                val month = ((v.month - 1 + delta).mod(12)) + 1
+                v.copy(month = month, day = v.day.coerceAtMost(DateTimeValue.daysIn(v.year, month)))
             }
-            1 -> onValueChange(v.copy(month = ((v.month - 1 + delta).mod(12)) + 1, day = v.day.coerceAtMost(DateTimeValue.daysIn(v.year, ((v.month - 1 + delta).mod(12)) + 1))))
-            2 -> onValueChange(v.copy(year = (v.year + delta).coerceIn(2000, 2100)))
-            3 -> onValueChange(v.copy(hour = (v.hour + delta).mod(24)))
-            else -> onValueChange(v.copy(minute = (v.minute + delta * step).mod(60)))
+            2 -> v.copy(year = (v.year + delta).coerceIn(2000, 2100))
+            3 -> v.copy(hour = (v.hour + delta).mod(24))
+            else -> v.copy(minute = (v.minute + delta * 15).mod(60))
         }
+        change(newValue)
     }
 
-    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-        Segment(0, "%02d".format(value.day), selected, onSelect = { selected = it }, onChange = { bump(0, it) })
+    val stepPx = with(LocalDensity.current) { 44.dp.toPx() }
+
+    Row(
+        modifier = modifier
+            // Свайп работает в любом месте поля, а не только по выделенной позиции:
+            // позиция уже выбрана тапом, и целиться в неё пальцем не нужно.
+            .pointerInput(Unit) {
+                var acc = 0f
+                detectVerticalDragGestures(
+                    onDragEnd = { acc = 0f },
+                    onDragCancel = { acc = 0f },
+                ) { changeEvent, dy ->
+                    changeEvent.consume()
+                    // Вверх (dy < 0) — увеличить, вниз — уменьшить. 44 dp на шаг:
+                    // спокойный темп, но длинный свайп всё равно идёт без остановки.
+                    acc += dy
+                    while (acc <= -stepPx) {
+                        acc += stepPx
+                        bump(selected, 1)
+                    }
+                    while (acc >= stepPx) {
+                        acc -= stepPx
+                        bump(selected, -1)
+                    }
+                }
+            },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Segment(0, "%02d".format(value.day), selected) { selected = it }
         Separator(".")
-        Segment(1, "%02d".format(value.month), selected, onSelect = { selected = it }, onChange = { bump(1, it) })
+        Segment(1, "%02d".format(value.month), selected) { selected = it }
         Separator(".")
-        Segment(2, "%04d".format(value.year), selected, onSelect = { selected = it }, onChange = { bump(2, it) })
+        Segment(2, "%04d".format(value.year), selected) { selected = it }
         Separator(" ")
-        Segment(3, "%02d".format(value.hour), selected, onSelect = { selected = it }, onChange = { bump(3, it) })
+        Segment(3, "%02d".format(value.hour), selected) { selected = it }
         Separator(":")
-        Segment(4, "%02d".format(value.minute), selected, onSelect = { selected = it }, onChange = { bump(4, it) })
+        Segment(4, "%02d".format(value.minute), selected) { selected = it }
     }
 }
 
@@ -139,56 +170,23 @@ private fun Separator(text: String) {
     Text(text, fontSize = 20.sp, fontWeight = FontWeight.Medium)
 }
 
-/**
- * Одна позиция: тап — выбрать, свайп вверх/вниз — изменить.
- * Шаг изменения 26 dp: длинный свайп проходит несколько порогов и меняет значение
- * несколько раз, короткий — один.
- */
+/** Позиция: только выбор тапом (свайп ловит контейнер). */
 @Composable
-private fun Segment(
-    index: Int,
-    text: String,
-    selected: Int,
-    onSelect: (Int) -> Unit,
-    onChange: (Int) -> Unit,
-) {
-    val stepPx = with(LocalDensity.current) { 26.dp.toPx() }
-    var accumulated by remember { mutableIntStateOf(0) }
-    // 18sp вместо 16sp: владелец просил шрифт даты/времени чуть крупнее.
-    val highlight = if (selected == index) MaterialTheme.colorScheme.primaryContainer else Color.Transparent
+private fun Segment(index: Int, text: String, selected: Int, onSelect: (Int) -> Unit) {
+    val isSelected = selected == index
+    // Подсветка совсем лёгкая: тёмная плашка перекрывала цифры.
+    val highlight = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.10f) else Color.Transparent
 
     Box(
         modifier = Modifier
             .background(highlight, RoundedCornerShape(8.dp))
             .padding(horizontal = 6.dp, vertical = 8.dp)
-            .pointerInput(Unit) {
-                detectTapGestures { onSelect(index) }
-            }
-            .pointerInput(Unit) {
-                var acc = 0f
-                detectVerticalDragGestures(
-                    onDragStart = { onSelect(index) },
-                    onDragEnd = { acc = 0f },
-                    onDragCancel = { acc = 0f },
-                ) { change, dy ->
-                    change.consume()
-                    acc += dy
-                    // Пока палец идёт, каждые 26 dp меняем на шаг — «несколько раз за свайп».
-                    while (acc >= stepPx) {
-                        acc -= stepPx
-                        onChange(1)
-                    }
-                    while (acc <= -stepPx) {
-                        acc += stepPx
-                        onChange(-1)
-                    }
-                }
-            },
+            .pointerInput(Unit) { detectTapGestures { onSelect(index) } },
     ) {
         Text(
             text,
             fontSize = 18.sp,
-            fontWeight = if (selected == index) FontWeight.SemiBold else FontWeight.Normal,
+            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
         )
     }
 }

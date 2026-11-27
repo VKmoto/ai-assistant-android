@@ -1,5 +1,6 @@
 package com.app.assistant.ui.screen
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -23,6 +24,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -42,6 +44,8 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -55,9 +59,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.app.assistant.data.TaskItem
 import com.app.assistant.data.TasksApi
@@ -119,10 +128,7 @@ fun TasksScreen(
     var newDue by remember { mutableStateOf(DateTimeValue.nowMsk()) }
     var reminderFor by remember { mutableStateOf<TaskItem?>(null) }
     var reminderAt by remember { mutableStateOf(DateTimeValue.nowMsk()) }
-    var pomodoroFor by remember { mutableStateOf<TaskItem?>(null) }
-    var pomodoroSeconds by remember { mutableIntStateOf(25 * 60) }
-    var pomodoroRunning by remember { mutableStateOf(false) }
-    var pomodoroId by remember { mutableStateOf<String?>(null) }
+    var tab by remember { mutableIntStateOf(0) }
     // Каналы выбирает человек: по умолчанию только телефон. «Слать сразу везде» —
     // плохой дефолт (MAX/почта могут быть лишними для бытовой задачи).
     var reminderChannels by remember { mutableStateOf(setOf("local")) }
@@ -151,20 +157,6 @@ fun TasksScreen(
 
     // Фон обязателен: Activity прозрачная (edge-to-edge, как у чата), и без него
     // сквозь экран задач просвечивала домашняя подложка (скриншоты владельца).
-    // Тикаем локально: сервер хранит сессию и итог, а секунды не гоняем по сети.
-    LaunchedEffect(pomodoroRunning, pomodoroFor) {
-        while (pomodoroRunning && pomodoroSeconds > 0) {
-            kotlinx.coroutines.delay(1000)
-            pomodoroSeconds -= 1
-        }
-        if (pomodoroRunning && pomodoroSeconds == 0) {
-            pomodoroRunning = false
-            val id = pomodoroId
-            if (id != null) runCatching { TasksApi.finishPomodoro(client, config, id, true) }
-            pomodoroId = null
-        }
-    }
-
     Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         TopAppBar(
             title = { Text("Задачи") },
@@ -187,7 +179,20 @@ fun TasksScreen(
             },
         )
 
-        if (!ready) {
+        TabRow(selectedTabIndex = tab, modifier = Modifier.fillMaxWidth()) {
+            Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Задачи") })
+            Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Помодоро") })
+        }
+
+        if (tab == 1) {
+            PomodoroTab(
+                client = client,
+                config = config,
+                ready = ready,
+                onError = { error = it },
+                onGoSettings = { settingsUrl = baseUrl; settingsToken = token; showSettings = true },
+            )
+        } else if (!ready) {
             Text(
                 "Укажите адрес сервиса задач и токен устройства (кнопка настроек сверху).",
                 style = MaterialTheme.typography.bodyMedium,
@@ -341,19 +346,6 @@ fun TasksScreen(
                     }
                 }
             },
-            onStartPomodoro = {
-                val task = selected
-                scope.launch {
-                    runCatching { TasksApi.startPomodoro(client, config, task?.id, 25 * 60) }
-                        .onSuccess { id ->
-                            pomodoroId = id
-                            pomodoroSeconds = 25 * 60
-                            pomodoroRunning = true
-                            pomodoroFor = task
-                        }
-                        .onFailure { e -> e.rethrowIfCancellation(); error = e.message }
-                }
-            },
             onAddReminder = {
                 // По умолчанию — срок самой задачи (если он есть), иначе текущее время.
                 reminderAt = selected?.dueAt?.let { DateTimeValue.fromIso(it) } ?: DateTimeValue.nowMsk()
@@ -369,45 +361,6 @@ fun TasksScreen(
                             .onFailure { e -> e.rethrowIfCancellation(); error = e.message }
                     }
                 }
-            },
-        )
-    }
-
-    if (pomodoroFor != null || pomodoroId != null) {
-        AlertDialog(
-            onDismissRequest = { },
-            title = { Text("Помодоро") },
-            text = {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        "%02d:%02d".format(pomodoroSeconds / 60, pomodoroSeconds % 60),
-                        style = MaterialTheme.typography.displaySmall,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    Text(
-                        pomodoroFor?.title ?: "Без задачи",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { pomodoroRunning = !pomodoroRunning }) {
-                    Text(if (pomodoroRunning) "Пауза" else "Продолжить")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = {
-                    val id = pomodoroId
-                    pomodoroRunning = false
-                    pomodoroId = null
-                    pomodoroFor = null
-                    pomodoroSeconds = 25 * 60
-                    if (id != null) scope.launch {
-                        runCatching { TasksApi.finishPomodoro(client, config, id, false) }
-                            .onFailure { e -> e.rethrowIfCancellation() }
-                    }
-                }) { Text("Стоп") }
             },
         )
     }
@@ -474,6 +427,150 @@ fun TasksScreen(
             },
             dismissButton = { TextButton(onClick = { reminderFor = null }) { Text("Отмена") } },
         )
+    }
+}
+
+/**
+ * Вкладка «Помодоро» — отдельный режим, а не кнопка в задаче (просьба владельца).
+ *
+ * Большая круглая красная кнопка-помидор: тело, блик и зелёный листик нарисованы
+ * Canvas-ом, поэтому не зависит от иконок и масштабируется без потерь. Внутри —
+ * play/pause, тоже нарисованный (иконки Pause в базовом наборе нет).
+ */
+@Composable
+private fun PomodoroTab(
+    client: OkHttpClient,
+    config: TasksConfig,
+    ready: Boolean,
+    onError: (String?) -> Unit,
+    onGoSettings: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    var running by remember { mutableStateOf(false) }
+    var seconds by remember { mutableIntStateOf(25 * 60) }
+    var sessionId by remember { mutableStateOf<String?>(null) }
+    var stats by remember { mutableStateOf<TasksApi.PomodoroStats?>(null) }
+
+    LaunchedEffect(running) {
+        while (running && seconds > 0) {
+            kotlinx.coroutines.delay(1000)
+            seconds -= 1
+        }
+        if (running && seconds == 0) {
+            running = false
+            val id = sessionId
+            sessionId = null
+            if (id != null) runCatching { TasksApi.finishPomodoro(client, config, id, true) }
+            runCatching { stats = TasksApi.pomodoroStats(client, config) }
+        }
+    }
+    LaunchedEffect(ready) {
+        if (ready) runCatching { stats = TasksApi.pomodoroStats(client, config) }
+    }
+
+    Column(
+        modifier = Modifier.fillMaxSize().padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        if (!ready) {
+            Text("Сначала укажите адрес сервиса задач и токен.", style = MaterialTheme.typography.bodyMedium)
+            Spacer(Modifier.height(12.dp))
+            Button(onClick = onGoSettings) { Text("Настроить") }
+        } else {
+            Text(
+                "%02d:%02d".format(seconds / 60, seconds % 60),
+                style = MaterialTheme.typography.displayLarge,
+            )
+        Spacer(Modifier.height(24.dp))
+
+        TomatoButton(
+            size = 200.dp,
+            running = running,
+            onClick = {
+                if (!running && sessionId == null && seconds == 0) seconds = 25 * 60
+                if (!running && sessionId == null) {
+                    scope.launch {
+                        runCatching { TasksApi.startPomodoro(client, config, null, seconds) }
+                            .onSuccess { id -> sessionId = id; running = true }
+                            .onFailure { e -> e.rethrowIfCancellation(); onError(e.message) }
+                    }
+                } else {
+                    running = !running
+                }
+            },
+        )
+
+        Spacer(Modifier.height(16.dp))
+        TextButton(onClick = {
+            running = false
+            val id = sessionId
+            sessionId = null
+            seconds = 25 * 60
+            if (id != null) scope.launch {
+                runCatching { TasksApi.finishPomodoro(client, config, id, false) }
+                    .onFailure { e -> e.rethrowIfCancellation() }
+            }
+        }) { Text("Сброс") }
+
+            stats?.let {
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "За 7 дней: ${it.sessions} сессий · ${it.seconds / 60} мин",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TomatoButton(size: Dp, running: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier.size(size).clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val w = this.size.width
+            val h = this.size.height
+            val cx = w / 2f
+            val cy = h * 0.58f
+            val r = w * 0.40f
+            // тело помидора
+            drawCircle(Color(0xFFD32F2F), radius = r, center = Offset(cx, cy))
+            // мягкий блик
+            drawCircle(Color.White.copy(alpha = 0.16f), radius = r * 0.42f, center = Offset(cx - r * 0.35f, cy - r * 0.40f))
+            // листик и черешок
+            drawOval(Color(0xFF2E7D32), topLeft = Offset(cx - r * 0.48f, cy - r * 1.22f), size = Size(r * 0.96f, r * 0.46f))
+            drawRect(Color(0xFF2E7D32), topLeft = Offset(cx - r * 0.03f, cy - r * 1.05f), size = Size(r * 0.06f, r * 0.30f))
+
+            // play / pause
+            if (running) {
+                val barW = r * 0.12f
+                val barH = r * 0.42f
+                drawRoundRect(
+                    Color.White,
+                    topLeft = Offset(cx - barW * 1.6f, cy - barH / 2),
+                    size = Size(barW, barH),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(barW / 2),
+                )
+                drawRoundRect(
+                    Color.White,
+                    topLeft = Offset(cx + barW * 0.6f, cy - barH / 2),
+                    size = Size(barW, barH),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(barW / 2),
+                )
+            } else {
+                val path = Path().apply {
+                    moveTo(cx - r * 0.16f, cy - r * 0.30f)
+                    lineTo(cx + r * 0.30f, cy)
+                    lineTo(cx - r * 0.16f, cy + r * 0.30f)
+                    close()
+                }
+                drawPath(path, Color.White)
+            }
+        }
     }
 }
 
@@ -589,7 +686,6 @@ private fun TaskDetailsDialog(
     onDismiss: () -> Unit,
     onMove: (String) -> Unit,
     onAddReminder: () -> Unit,
-    onStartPomodoro: () -> Unit,
     onComplete: () -> Unit,
 ) {
     AlertDialog(
@@ -604,9 +700,6 @@ private fun TaskDetailsDialog(
                 Text("Статус: ${statusLabel(task.status)}", style = MaterialTheme.typography.bodySmall)
                 dueLabel(task.dueAt)?.let { Text("Срок: $it", style = MaterialTheme.typography.bodySmall) }
                 Spacer(Modifier.height(12.dp))
-                TextButton(onClick = onStartPomodoro, modifier = Modifier.fillMaxWidth()) {
-                    Text("Помодоро 25:00")
-                }
                 TextButton(onClick = onAddReminder, modifier = Modifier.fillMaxWidth()) {
                     Text("Напоминание…")
                 }
