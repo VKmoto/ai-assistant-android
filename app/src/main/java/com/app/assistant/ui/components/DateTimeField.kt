@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -124,12 +125,31 @@ fun DateTimeField(
         change(newValue)
     }
 
-    val stepPx = with(LocalDensity.current) { 44.dp.toPx() }
+    // Центры сегментов в координатах поля: тап определяется по x, чтобы тап и свайп
+    // жили в ОДНОМ pointerInput поля. Раньше тап обрабатывался на сегменте, и жест,
+    // начатый на нём, до поля не доходил — после выбора позиции тапом свайп не менял
+    // значение (баг владельца 2026-11-27).
+    val centers = remember { FloatArray(5) }
+
+    // +20% к прежней скорости: 44 dp → 37 dp на шаг.
+    val stepPx = with(LocalDensity.current) { 37.dp.toPx() }
 
     Row(
         modifier = modifier
             // Свайп работает в любом месте поля, а не только по выделенной позиции:
             // позиция уже выбрана тапом, и целиться в неё пальцем не нужно.
+            .pointerInput(Unit) {
+                detectTapGestures { offset ->
+                    // Ближайший центр сегмента — и есть выбранная позиция.
+                    var best = 0
+                    var bestDist = Float.MAX_VALUE
+                    centers.forEachIndexed { i, c ->
+                        val d = kotlin.math.abs(offset.x - c)
+                        if (d < bestDist) { bestDist = d; best = i }
+                    }
+                    selected = best
+                }
+            }
             .pointerInput(Unit) {
                 var acc = 0f
                 detectVerticalDragGestures(
@@ -153,15 +173,15 @@ fun DateTimeField(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        Segment(0, "%02d".format(value.day), selected) { selected = it }
+        Segment(0, "%02d".format(value.day), selected) { x -> centers[0] = x }
         Separator(".")
-        Segment(1, "%02d".format(value.month), selected) { selected = it }
+        Segment(1, "%02d".format(value.month), selected) { x -> centers[1] = x }
         Separator(".")
-        Segment(2, "%04d".format(value.year), selected) { selected = it }
+        Segment(2, "%04d".format(value.year), selected) { x -> centers[2] = x }
         Separator(" ")
-        Segment(3, "%02d".format(value.hour), selected) { selected = it }
+        Segment(3, "%02d".format(value.hour), selected) { x -> centers[3] = x }
         Separator(":")
-        Segment(4, "%02d".format(value.minute), selected) { selected = it }
+        Segment(4, "%02d".format(value.minute), selected) { x -> centers[4] = x }
     }
 }
 
@@ -170,9 +190,9 @@ private fun Separator(text: String) {
     Text(text, fontSize = 20.sp, fontWeight = FontWeight.Medium)
 }
 
-/** Позиция: только выбор тапом (свайп ловит контейнер). */
+/** Позиция: сообщает свой центр в координатах поля; тап и свайп ловит контейнер. */
 @Composable
-private fun Segment(index: Int, text: String, selected: Int, onSelect: (Int) -> Unit) {
+private fun Segment(index: Int, text: String, selected: Int, onCenter: (Float) -> Unit) {
     val isSelected = selected == index
     // Подсветка совсем лёгкая: тёмная плашка перекрывала цифры.
     val highlight = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.10f) else Color.Transparent
@@ -181,7 +201,9 @@ private fun Segment(index: Int, text: String, selected: Int, onSelect: (Int) -> 
         modifier = Modifier
             .background(highlight, RoundedCornerShape(8.dp))
             .padding(horizontal = 6.dp, vertical = 8.dp)
-            .pointerInput(Unit) { detectTapGestures { onSelect(index) } },
+            .onGloballyPositioned { coords ->
+                onCenter(coords.positionInParent().x + coords.size.width / 2f)
+            },
     ) {
         Text(
             text,

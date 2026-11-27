@@ -55,6 +55,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -72,6 +73,7 @@ import androidx.compose.ui.unit.dp
 import com.app.assistant.data.TaskItem
 import com.app.assistant.data.TasksApi
 import com.app.assistant.data.TasksConfig
+import com.app.assistant.tasks.PomodoroSound
 import com.app.assistant.ui.components.DateTimeField
 import com.app.assistant.ui.components.DateTimeValue
 import com.app.assistant.repository.SettingsRepository
@@ -191,6 +193,7 @@ fun TasksScreen(
                 client = client,
                 config = config,
                 ready = ready,
+                settingsRepository = settingsRepository,
                 onError = { error = it },
                 onGoSettings = { settingsUrl = baseUrl; settingsToken = token; showSettings = true },
             )
@@ -444,27 +447,76 @@ private fun PomodoroTab(
     client: OkHttpClient,
     config: TasksConfig,
     ready: Boolean,
+    settingsRepository: SettingsRepository,
     onError: (String?) -> Unit,
     onGoSettings: () -> Unit,
 ) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var running by remember { mutableStateOf(false) }
-    var seconds by remember { mutableIntStateOf(25 * 60) }
-    var sessionId by remember { mutableStateOf<String?>(null) }
+
+    // Состояние живёт в prefs: вкладка может уйти из композиции, приложение — в фон.
+    // Храним не остаток, а конец фазы: при возврате досчитываем по часам.
+    var sessionId by remember { mutableStateOf(settingsRepository.getPomodoroSession()) }
+    var endAt by remember { mutableLongStateOf(settingsRepository.getPomodoroEndAt()) }
+    var mode by remember { mutableStateOf(settingsRepository.getPomodoroMode()) }
+    var cycle by remember { mutableIntStateOf(settingsRepository.getPomodoroCycle()) }
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var stats by remember { mutableStateOf<TasksApi.PomodoroStats?>(null) }
 
-    LaunchedEffect(running) {
-        while (running && seconds > 0) {
+    val phaseTotal = when (mode) {
+        "work" -> 25 * 60
+        "long_break" -> 15 * 60
+        else -> 5 * 60
+    }
+    val remaining = if (sessionId == null) {
+        phaseTotal
+    } else {
+        ((endAt - now) / 1000L).coerceAtLeast(0L).toInt()
+    }
+
+    fun persist(id: String?, end: Long, phase: String, cycles: Int) {
+        sessionId = id
+        endAt = end
+        mode = phase
+        cycle = cycles
+        settingsRepository.savePomodoro(id, end, phase, cycles)
+    }
+
+    suspend fun startPhase(phase: String, durationSec: Int) {
+        runCatching { TasksApi.startPomodoro(client, config, null, durationSec) }
+            .onSuccess { id -> persist(id, System.currentTimeMillis() + durationSec * 1000L, phase, cycle) }
+            .onFailure { e -> e.rethrowIfCancellation(); onError(e.message) }
+    }
+
+    suspend fun finishPhase(completed: Boolean) {
+        val id = sessionId
+        if (id != null) runCatching { TasksApi.finishPomodoro(client, config, id, completed) }
+        when {
+            mode == "work" -> {
+                // Стандартный цикл: 25 работы → 5 отдыха; после каждого 4-го — 15.
+                val next = cycle + 1
+                PomodoroSound.play(context)
+                val breakPhase = if (next % 4 == 0) "long_break" else "short_break"
+                persist(null, 0L, breakPhase, next)
+                startPhase(breakPhase, if (breakPhase == "long_break") 15 * 60 else 5 * 60)
+            }
+            else -> {
+                // Перерыв закончился — ждём тапа на новую работу.
+                PomodoroSound.play(context)
+                persist(null, 0L, "work", cycle)
+            }
+        }
+        runCatching { stats = TasksApi.pomodoroStats(client, config) }
+    }
+
+    LaunchedEffect(Unit) {
+        while (true) {
             kotlinx.coroutines.delay(1000)
-            seconds -= 1
+            now = System.currentTimeMillis()
         }
-        if (running && seconds == 0) {
-            running = false
-            val id = sessionId
-            sessionId = null
-            if (id != null) runCatching { TasksApi.finishPomodoro(client, config, id, true) }
-            runCatching { stats = TasksApi.pomodoroStats(client, config) }
-        }
+    }
+    LaunchedEffect(sessionId, remaining) {
+        if (sessionId != null && remaining <= 0) finishPhase(true)
     }
     LaunchedEffect(ready) {
         if (ready) runCatching { stats = TasksApi.pomodoroStats(client, config) }
@@ -481,39 +533,48 @@ private fun PomodoroTab(
             Button(onClick = onGoSettings) { Text("Настроить") }
         } else {
             Text(
-                "%02d:%02d".format(seconds / 60, seconds % 60),
+                when (mode) {
+                    "work" -> "Работа"
+                    "long_break" -> "Длинный перерыв"
+                    else -> "Перерыв"
+                },
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                "%02d:%02d".format(remaining / 60, remaining % 60),
                 style = MaterialTheme.typography.displayLarge,
             )
-        Spacer(Modifier.height(24.dp))
+            Text(
+                "цикл ${cycle % 4} из 4",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(24.dp))
 
-        TomatoButton(
-            diameter = 200.dp,
-            running = running,
-            onClick = {
-                if (!running && sessionId == null && seconds == 0) seconds = 25 * 60
-                if (!running && sessionId == null) {
-                    scope.launch {
-                        runCatching { TasksApi.startPomodoro(client, config, null, seconds) }
-                            .onSuccess { id -> sessionId = id; running = true }
-                            .onFailure { e -> e.rethrowIfCancellation(); onError(e.message) }
+            TomatoButton(
+                diameter = 200.dp,
+                running = sessionId != null,
+                onClick = {
+                    if (sessionId == null) {
+                        // Тап начинает фазу работы.
+                        scope.launch { startPhase("work", 25 * 60) }
+                    } else {
+                        // Тап завершает текущую фазу досрочно.
+                        scope.launch { finishPhase(false) }
                     }
-                } else {
-                    running = !running
-                }
-            },
-        )
+                },
+            )
 
-        Spacer(Modifier.height(16.dp))
-        TextButton(onClick = {
-            running = false
-            val id = sessionId
-            sessionId = null
-            seconds = 25 * 60
-            if (id != null) scope.launch {
-                runCatching { TasksApi.finishPomodoro(client, config, id, false) }
-                    .onFailure { e -> e.rethrowIfCancellation() }
-            }
-        }) { Text("Сброс") }
+            Spacer(Modifier.height(16.dp))
+            TextButton(onClick = {
+                val id = sessionId
+                persist(null, 0L, "work", 0)
+                if (id != null) scope.launch {
+                    runCatching { TasksApi.finishPomodoro(client, config, id, false) }
+                        .onFailure { e -> e.rethrowIfCancellation() }
+                }
+            }) { Text("Сброс") }
 
             stats?.let {
                 Spacer(Modifier.height(12.dp))

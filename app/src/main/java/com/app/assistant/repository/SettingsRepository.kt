@@ -342,5 +342,30 @@ class SettingsRepository(
     fun setTasksToken(token: String) {
         securedPreferences.edit().putString("tasks_token", token.trim()).apply()
     }
+
+    // ---- помодоро ------------------------------------------------------------
+    // Состояние переживает смену вкладки и уход приложения в фон: храним не остаток,
+    // а момент окончания фазы, чтобы после возврата досчитать по часам.
+    fun getPomodoroSession(): String? = sharedPreferences.getString("pomodoro_session", null)
+    fun getPomodoroEndAt(): Long = sharedPreferences.getLong("pomodoro_end_at", 0L)
+    fun getPomodoroMode(): String = sharedPreferences.getString("pomodoro_mode", "work") ?: "work"
+    fun getPomodoroCycle(): Int = sharedPreferences.getInt("pomodoro_cycle", 0)
+
+    fun savePomodoro(sessionId: String?, endAt: Long, mode: String, cycle: Int) {
+        sharedPreferences.edit()
+            .putString("pomodoro_session", sessionId)
+            .putLong("pomodoro_end_at", endAt)
+            .putString("pomodoro_mode", mode)
+            .putInt("pomodoro_cycle", cycle)
+            .apply()
+    }
+
+    fun clearPomodoro() {
+        sharedPreferences.edit()
+            .remove("pomodoro_session")
+            .remove("pomodoro_end_at")
+            .remove("pomodoro_mode")
+            .apply()
+    }
 }
 
