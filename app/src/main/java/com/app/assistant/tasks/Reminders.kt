@@ -33,6 +33,28 @@ import java.util.concurrent.TimeUnit
  * Сервер отмечает `local_sent_at` отдельно от `remote_sent_at`, поэтому воркер
  * MAX/Telegram/email не «съедает» напоминание до того, как телефон его заберёт.
  */
+/**
+ * Отметки «уведомление уже показано».
+ *
+ * Точный будильник (AlarmManager) и страховочный воркер (WorkManager) смотрят на одно и
+ * то же напоминание, поэтому владелец получал его дважды. Кто первый показал — тот
+ * ставит отметку, второй молчит.
+ */
+object ShownReminders {
+    private const val PREFS = "tasks_reminders_shown"
+
+    fun wasShown(context: Context, id: String): Boolean {
+        val at = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong(id, 0L)
+        // Отметка живёт двое суток: этого хватает, чтобы гасить дубли, и не растёт файл.
+        return at > 0 && System.currentTimeMillis() - at < 2L * 24 * 60 * 60 * 1000
+    }
+
+    fun mark(context: Context, id: String) {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        prefs.edit().putLong(id, System.currentTimeMillis()).apply()
+    }
+}
+
 object ReminderScheduler {
     private const val WORK_NAME = "tasks-reminders"
     const val CHANNEL_ID = "tasks-reminders"
@@ -67,6 +89,22 @@ object ReminderScheduler {
      * точные будильники (Android 12+), падаем на setAndAllowWhileIdle — лучше
      * приблизительно, чем никак.
      */
+    /** Снять будильники, поставленные на задачу до сдвига срока. */
+    fun cancelExact(context: Context, key: String) {
+        val manager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val pending = PendingIntent.getBroadcast(
+            context,
+            key.hashCode(),
+            // action обязан совпасть с тем, что ставил scheduleExact: PendingIntent
+            // сравнивается по action+data, иначе cancel() тихо ничего не снимет.
+            Intent(context, ReminderAlarmReceiver::class.java).apply {
+                action = "bbx.tasks.REMINDER:$key"
+            },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        manager.cancel(pending)
+    }
+
     fun scheduleExact(context: Context, reminderId: String, title: String, fireAtMs: Long) {
         ensureChannel(context)
         val manager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
@@ -96,9 +134,12 @@ object ReminderScheduler {
 class ReminderAlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val title = intent.getStringExtra("title") ?: return
+        val id = intent.getStringExtra("id") ?: title
+        if (ShownReminders.wasShown(context, id)) return
+        ShownReminders.mark(context, id)
         ReminderScheduler.ensureChannel(context)
         NotificationManagerCompat.from(context).notify(
-            (intent.getStringExtra("id") ?: title).hashCode(),
+            id.hashCode(),
             NotificationCompat.Builder(context, ReminderScheduler.CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_live_modes)
                 .setContentTitle("Напоминание")
@@ -134,6 +175,9 @@ class ReminderWorker(
         return runCatching {
             val due = TasksApi.dueReminders(MainViewModelFactory.okHttpClient, TasksConfig(base, token))
             due.forEach { item ->
+                // Будильник мог уже показать это напоминание — тогда второй раз не шумим.
+                if (ShownReminders.wasShown(applicationContext, item.id)) return@forEach
+                ShownReminders.mark(applicationContext, item.id)
                 NotificationManagerCompat.from(applicationContext).notify(
                     item.id.hashCode(),
                     NotificationCompat.Builder(applicationContext, ReminderScheduler.CHANNEL_ID)
@@ -151,7 +195,7 @@ class ReminderWorker(
             runCatching {
                 TasksApi.upcomingReminders(MainViewModelFactory.okHttpClient, TasksConfig(base, token))
                     .forEach { r ->
-                        ReminderScheduler.scheduleExact(applicationContext, r.id, r.title, r.fireAtMs)
+                        ReminderScheduler.scheduleExact(applicationContext, "task_${r.taskId}", r.title, r.fireAtMs)
                     }
             }
             Result.success()

@@ -75,6 +75,7 @@ import androidx.compose.ui.unit.dp
 import com.app.assistant.data.TaskItem
 import com.app.assistant.data.TasksApi
 import com.app.assistant.data.TasksConfig
+import com.app.assistant.tasks.ReminderScheduler
 import com.app.assistant.tasks.PomodoroSound
 import com.app.assistant.ui.components.DateTimeField
 import com.app.assistant.ui.components.DateTimeValue
@@ -122,8 +123,10 @@ fun TasksScreen(
     var token by remember { mutableStateOf(settingsRepository.getTasksToken()) }
     var showSettings by remember { mutableStateOf(false) }
     var showAdd by remember { mutableStateOf(false) }
-    var view by remember { mutableStateOf("today") }
+    var view by remember { mutableStateOf("calendar") }
     var kanban by remember { mutableStateOf(false) }
+    var month by remember { mutableStateOf(TaskDates.currentMonth()) }
+    var dayView by remember { mutableStateOf<MskDay?>(null) }
     var tasks by remember { mutableStateOf<List<TaskItem>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -155,7 +158,11 @@ fun TasksScreen(
         if (ready) {
             loading = true
             error = null
-            runCatching { TasksApi.list(client, config, if (kanban) "kanban" else view) }
+            runCatching {
+                // Календарь показывает и прошлые, и выполненные задачи месяца, поэтому
+                // ему нужен полный список, а не «сегодня/предстоящее».
+                TasksApi.list(client, config, if (kanban || view == "calendar") "kanban" else view)
+            }
                 .onSuccess { tasks = it }
                 .onFailure { error = it.message ?: "не удалось загрузить" }
             loading = false
@@ -226,17 +233,16 @@ fun TasksScreen(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                FilterChip(selected = !kanban && view == "inbox", onClick = { kanban = false; view = "inbox" }, label = { Text("Входящие") })
-                FilterChip(selected = !kanban && view == "today", onClick = { kanban = false; view = "today" }, label = { Text("Сегодня") })
-                FilterChip(selected = !kanban && view == "upcoming", onClick = { kanban = false; view = "upcoming" }, label = { Text("Предстоящее") })
-                FilterChip(selected = kanban, onClick = { kanban = true }, label = { Text("Канбан") })
+                FilterChip(selected = !kanban && view == "calendar", onClick = { kanban = false; view = "calendar"; dayView = null }, label = { Text("Календарь") })
+                FilterChip(selected = !kanban && view == "today", onClick = { kanban = false; view = "today"; dayView = null }, label = { Text("Сегодня") })
+                FilterChip(selected = kanban, onClick = { kanban = true; dayView = null }, label = { Text("Канбан") })
             }
 
             if (loading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             } else if (error != null) {
                 Text(error!!, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp))
-            } else if (tasks.isEmpty()) {
+            } else if (tasks.isEmpty() && view != "calendar") {
                 Text("Пусто", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp))
             } else if (kanban) {
                 KanbanBoard(
@@ -250,6 +256,23 @@ fun TasksScreen(
                         }
                     },
                 )
+            } else if (view == "calendar") {
+                val day = dayView
+                if (day == null) {
+                    TasksCalendar(
+                        tasks = tasks,
+                        month = month,
+                        onMonthChange = { month = it },
+                        onDayClick = { dayView = it },
+                    )
+                } else {
+                    TasksDaySchedule(
+                        tasks = tasks,
+                        day = day,
+                        onBack = { dayView = null },
+                        onTaskClick = { selected = it },
+                    )
+                }
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
@@ -362,6 +385,24 @@ fun TasksScreen(
                     scope.launch {
                         runCatching { TasksApi.move(client, config, task.id, status) }
                             .onSuccess { selected = null; refreshKey++ }
+                            .onFailure { e -> e.rethrowIfCancellation(); error = e.message }
+                    }
+                }
+            },
+            onUpdateDue = { due ->
+                val task = selected
+                if (task != null) {
+                    scope.launch {
+                        runCatching { TasksApi.updateDue(client, config, task.id, due.toIso()) }
+                            .onSuccess {
+                                selected = null
+                                refreshKey++
+                                // Срок поменялся — прежний точный будильник больше не про это.
+                                ReminderScheduler.cancelExact(context, "task_${task.id}")
+                                if (it.hasReminder) {
+                                    ReminderScheduler.scheduleExact(context, "task_${it.id}", it.title, due.toEpochMillis())
+                                }
+                            }
                             .onFailure { e -> e.rethrowIfCancellation(); error = e.message }
                     }
                 }
@@ -488,7 +529,7 @@ fun TasksScreen(
                                     if (reminderChannels.contains("local")) {
                                         com.app.assistant.tasks.ReminderScheduler.scheduleExact(
                                             context,
-                                            "local_${task.id}_${reminderAt.toIso()}",
+                                            "task_${task.id}",
                                             task.title,
                                             reminderAt.toEpochMillis(),
                                         )
@@ -864,8 +905,15 @@ private fun TaskDetailsDialog(
     onDismiss: () -> Unit,
     onMove: (String) -> Unit,
     onAddReminder: () -> Unit,
+    onUpdateDue: (DateTimeValue) -> Unit,
     onComplete: () -> Unit,
 ) {
+    // Срок можно сдвинуть прямо здесь: раньше изменить дату/время задачи было нельзя
+    // вовсе (только удалить и создать заново).
+    var editing by remember { mutableStateOf(false) }
+    var due by remember(task.id, task.dueAt) {
+        mutableStateOf(task.dueAt?.let { DateTimeValue.fromIso(it) } ?: DateTimeValue.nowMsk())
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(task.title) },
@@ -877,6 +925,20 @@ private fun TaskDetailsDialog(
                 }
                 Text("Статус: ${statusLabel(task.status)}", style = MaterialTheme.typography.bodySmall)
                 dueLabel(task.dueAt)?.let { Text("Срок: $it", style = MaterialTheme.typography.bodySmall) }
+                Spacer(Modifier.height(8.dp))
+                if (!editing) {
+                    TextButton(onClick = { editing = true }, modifier = Modifier.fillMaxWidth()) {
+                        Text(if (task.dueAt == null) "Назначить срок…" else "Изменить срок…")
+                    }
+                } else {
+                    DateTimeField(value = due, onValueChange = { due = it }, label = "Новый срок")
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = {
+                            onUpdateDue(due)
+                        }) { Text("Сохранить") }
+                        TextButton(onClick = { editing = false }) { Text("Отмена") }
+                    }
+                }
                 Spacer(Modifier.height(12.dp))
                 TextButton(onClick = onAddReminder, modifier = Modifier.fillMaxWidth()) {
                     Text("Напоминание…")

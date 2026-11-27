@@ -32,7 +32,7 @@ data class TasksConfig(val baseUrl: String, val token: String)
 data class DueReminder(val id: String, val title: String)
 
 /** Будущее напоминание для точного будильника. */
-data class UpcomingReminder(val id: String, val title: String, val fireAtMs: Long)
+data class UpcomingReminder(val id: String, val taskId: String, val title: String, val fireAtMs: Long)
 
 object TasksApi {
     private val jsonType = "application/json; charset=utf-8".toMediaType()
@@ -97,6 +97,19 @@ object TasksApi {
             parseTask(JSONObject(body))
         }
     }
+
+    /** Сдвинуть срок задачи: owner меняет дату/время прямо в карточке. */
+    suspend fun updateDue(client: OkHttpClient, config: TasksConfig, id: String, dueAt: String?): TaskItem =
+        withContext(Dispatchers.IO) {
+            val payload = JSONObject().apply { put("due_at", dueAt ?: JSONObject.NULL) }
+            val req = request(config, "/api/v1/tasks/$id")
+                .patch(payload.toString().toRequestBody(jsonType)).build()
+            client.newCall(req).execute().use { res ->
+                val body = res.body?.string().orEmpty()
+                if (!res.isSuccessful) throw IllegalStateException(errorMessage(body) ?: "HTTP ${res.code}")
+                parseTask(JSONObject(body))
+            }
+        }
 
     suspend fun move(client: OkHttpClient, config: TasksConfig, id: String, status: String): TaskItem =
         withContext(Dispatchers.IO) {
@@ -204,6 +217,7 @@ object TasksApi {
                     val o = arr.getJSONObject(it)
                     UpcomingReminder(
                         id = o.optString("id"),
+                        taskId = o.optString("task_id"),
                         title = o.optString("title"),
                         fireAtMs = parseIso(o.optString("fire_at")),
                     )
