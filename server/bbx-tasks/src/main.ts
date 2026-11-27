@@ -321,6 +321,39 @@ const server = createServer((req, res) => {
  * Тихие часы: мессенджеры молчат, email — исключение (решение владельца).
  */
 let workerStopped = false;
+let lastDigestMinute = "";
+
+/** Дайджесты: раз в минуту проверяем, не пора ли отправить утренний/вечерний. */
+async function digestTick(): Promise<void> {
+  if (workerStopped) return;
+  try {
+    const now = new Date();
+    const msk = new Date(now.getTime() + 3 * 3600_000).toISOString();
+    const hhmm = msk.slice(11, 16);
+    if (hhmm === lastDigestMinute) return;
+    lastDigestMinute = hhmm;
+    const today = msk.slice(0, 10);
+    const digest = await store.dueDigest(hhmm, today);
+    if (!digest) return;
+    const text = await store.digestText(digest.template);
+    const chat = await ownerChat();
+    if (chat && digest.channels.some((c) => c === "max" || c === "telegram")) {
+      await pool.query(
+        `INSERT INTO bbx.outbound_msg (channel, chat_id, chat_type, agent_alias, text, kind)
+         VALUES ($1,$2,$3,NULL,$4,'message')`,
+        [chat.channel, chat.chatId, chat.chatType, text],
+      );
+    }
+    if (digest.channels.includes("email")) {
+      await store.enqueueEmail(digest.template === "evening" ? "Итоги дня" : "Утренний дайджест", text);
+    }
+    await store.markDigestSent(digest.id);
+    log({ event: "digest-sent", id: digest.id, template: digest.template });
+  } catch (error) {
+    log({ event: "digest-error", error: error instanceof Error ? error.message : String(error) });
+  }
+}
+
 async function reminderTick(): Promise<void> {
   if (workerStopped) return;
   try {
@@ -359,6 +392,7 @@ store
       log({ event: "listening", bind: cfg.bind, port: cfg.port, tz: cfg.timezone });
     });
     setInterval(() => void reminderTick(), 15_000).unref();
+    setInterval(() => void digestTick(), 20_000).unref();
   })
   .catch((error) => {
     log({ event: "migrate-failed", error: error instanceof Error ? error.message : String(error) });

@@ -152,6 +152,13 @@ create table if not exists todo.agent_actions (
   created_at timestamptz not null default now()
 );
 create index if not exists agent_actions_recent on todo.agent_actions(created_at desc);
+alter table todo.digests add column if not exists last_sent_at timestamptz;
+
+-- Дефолтные дайджесты (утро/вечер). ON CONFLICT — чтобы перезапуск их не дублировал.
+insert into todo.digests (id, name, cron, template, channels, enabled) values
+  ('dg_morning', 'Утренний', '08:30', 'morning', '{max,email}', true),
+  ('dg_evening', 'Вечерний', '21:30', 'evening', '{max,email}', true)
+on conflict (id) do nothing;
 
 create table if not exists todo.email_outbox (
   id bigserial primary key,
@@ -561,6 +568,62 @@ export class Store {
       dueAt: input.dueAt ?? null,
       createdBy: "pipeline",
     });
+  }
+
+  // --------------------------------------------------------------- дайджесты
+  /**
+   * Дайджест, который пора отправить: cron хранится как «HH:MM» по Москве,
+   * last_sent_at защищает от повторной отправки в ту же минуту и в тот же день.
+   */
+  async dueDigest(nowHhMm: string, todayMsk: string): Promise<{ id: string; template: string; channels: string[] } | null> {
+    const r = await this.pool.query<{ id: string; template: string; channels: string[] }>(
+      `SELECT id, template, channels FROM todo.digests
+        WHERE enabled AND cron = $1
+          AND (last_sent_at IS NULL OR (last_sent_at AT TIME ZONE 'Europe/Moscow')::date < $2::date)
+        LIMIT 1`,
+      [nowHhMm, todayMsk],
+    );
+    return r.rows[0] ?? null;
+  }
+
+  async markDigestSent(id: string): Promise<void> {
+    await this.pool.query("UPDATE todo.digests SET last_sent_at = now() WHERE id=$1", [id]);
+  }
+
+  /** Текст дайджеста из текущих задач: только факты, без «умных» выводов. */
+  async digestText(template: string): Promise<string> {
+    const counts = await this.pool.query<{ today: string; overdue: string; open: string; done_today: string }>(
+      `SELECT
+         count(*) FILTER (WHERE status IN ('todo','in_progress','waiting')
+                            AND due_at IS NOT NULL
+                            AND (due_at AT TIME ZONE 'Europe/Moscow')::date = (now() AT TIME ZONE 'Europe/Moscow')::date)::text AS today,
+         count(*) FILTER (WHERE status IN ('todo','in_progress','waiting')
+                            AND due_at IS NOT NULL
+                            AND (due_at AT TIME ZONE 'Europe/Moscow')::date < (now() AT TIME ZONE 'Europe/Moscow')::date)::text AS overdue,
+         count(*) FILTER (WHERE status IN ('todo','in_progress','waiting'))::text AS open,
+         count(*) FILTER (WHERE status='done'
+                            AND (completed_at AT TIME ZONE 'Europe/Moscow')::date = (now() AT TIME ZONE 'Europe/Moscow')::date)::text AS done_today
+       FROM todo.tasks WHERE deleted_at IS NULL`,
+    );
+    const row = counts.rows[0]!;
+    const top = await this.pool.query<{ title: string }>(
+      `SELECT title FROM todo.tasks
+        WHERE deleted_at IS NULL AND status IN ('todo','in_progress','waiting')
+        ORDER BY priority, due_at NULLS LAST LIMIT 3`,
+    );
+    const list = top.rows.map((r, i) => `${i + 1}. ${r.title}`).join("\n");
+    if (template === "evening") {
+      return `🌙 Итоги дня: выполнено ${row.done_today}, осталось ${row.open}.` +
+        (row.overdue !== "0" ? ` Просрочено: ${row.overdue}.` : "") + (list ? `\nНа завтра:\n${list}` : "");
+    }
+    return `☀️ Доброе утро. Сегодня ${row.today} задач` +
+      (row.overdue !== "0" ? `, просрочено ${row.overdue}` : "") +
+      (list ? `:\n${list}` : ".");
+  }
+
+  async listDigests(): Promise<unknown[]> {
+    const r = await this.pool.query("SELECT * FROM todo.digests ORDER BY cron");
+    return r.rows;
   }
 
   // --------------------------------------------------------------- pomodoro
