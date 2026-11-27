@@ -931,7 +931,9 @@ private fun TaskDetailsDialog(
                         Text(if (task.dueAt == null) "Назначить срок…" else "Изменить срок…")
                     }
                 } else {
-                    DateTimeField(value = due, onValueChange = { due = it }, label = "Новый срок")
+                    Text("Новый срок", style = MaterialTheme.typography.labelMedium)
+                    Spacer(Modifier.height(4.dp))
+                    DateTimeField(value = due, onValueChange = { due = it })
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         TextButton(onClick = {
                             onUpdateDue(due)
