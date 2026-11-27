@@ -1,0 +1,204 @@
+#!/usr/bin/env bash
+# Daily backup of everything that cannot be rebuilt from elsewhere.
+#
+# THREE HALVES, ON PURPOSE.
+#   agents-kb (git bundle)        -- the agents' knowledge.
+#   bbx.* + todo schemas (pg_dump) -- identities + задачи/напоминания/помодоро,
+#                                    sticky model, roles). Losing it makes every
+#                                    agent unfindable even though the KB survives.
+#   the router's own source       -- the code that ties the two together (vendored
+#                                    into agents-kb/bb-messenger and pushed to GitHub,
+#                                    see sync_router_source below). It existed for
+#                                    weeks as a single on-disk copy with zero remotes.
+# Each half is lost differently and rebuilds from nothing else, so each is verified
+# on its own terms.
+#
+# OFF-BOX IS THE POINT. A backup that lives only on this VPS is a second copy of the
+# same risk (disk loss, a hostile agent with root, `rm -rf`). Bundles are written to
+# $BACKUP_DIR on the host and their SHA256 is printed so an off-box copy can be
+# verified; anything beyond that (S3, another host) is deployment, not this script.
+set -euo pipefail
+
+BACKUP_DIR="${BBX_BACKUP_DIR:-/var/backups/bbx}"
+REPO="${BBX_KB_REPO:-/root/agents-kb}"
+KEEP_DAYS="${BBX_BACKUP_KEEP_DAYS:-14}"
+# DSN for the bbx schema only; pg_dump needs read access to that schema and nothing else.
+# Three sources, best first: an explicit override, then the connector's own DSN
+# variable, then gitpush's. The connector and the backup must point at the SAME
+# database, so reusing a config the deployment already wrote is safer than a fourth
+# place to keep a DSN in sync -- and if they ever diverge, /status-style drift is what
+# you would get: a "backup" of a database nobody uses.
+DB_URL="${BBX_BACKUP_DB_URL:-${pgDsn:-${BBX_DATABASE_URL:-}}}"
+STAMP="$(date -u +%Y%m%d-%H%M%SZ)"
+mkdir -p "$BACKUP_DIR"
+cd "$REPO"
+
+# --all: refs/heads AND refs/remotes. A bundle of the local branches alone silently
+# omits whatever is pushed but never fetched here, which after a host reinstall is
+# exactly the newest work.
+BUNDLE="$BACKUP_DIR/agents-kb-$STAMP.bundle"
+git bundle create "$BUNDLE" --all >/dev/null
+# Verify it as the author would otherwise never learn: a bundle that cannot be
+# verified is a file, not a backup. `git bundle verify` refuses a truncated or
+# empty bundle, and lists the tips it carries.
+git bundle verify "$BUNDLE" >/dev/null
+
+# -- Router source --
+# Sync the router's own code into this repo and push it to GitHub, reusing the
+# KB's deploy key. Kept separate from $BUNDLE/$STATUS above: it is a bonus layer
+# and its failure must NOT mark the whole backup failed (STATUS drives the artifact
+# registration), so it reports its own CODE_STATUS and stays loud in the journal
+# without touching the halves that /backup and restore depend on. Runs BEFORE the
+# bundle verify? No -- AFTER, deliberately: the bundle we just wrote is verified and
+# safe, and a source push that then fails cannot retroactively poison it.
+CODE_STATUS=ok
+SOURCE="${BBX_PLUGIN_SOURCE:-/root/bb-plugins/bb-plugin-bb-messenger}"
+GITPUSH_ENV="${GITPUSH_ENV:-/opt/bbx-connector/etc/gitpush.env}"
+DEPLOY_KEY="${BBX_BACKUP_DEPLOY_KEY:-}"
+# The key path (not the key) is read from gitpush's config so it is not a fourth
+# place to keep it; a path to a key is useless off-host. Override with BBX_BACKUP_DEPLOY_KEY.
+if [ -z "$DEPLOY_KEY" ] && [ -r "$GITPUSH_ENV" ]; then
+  DEPLOY_KEY="$(sed -n 's/^deployKeyPath=//p' "$GITPUSH_ENV" | head -1)"
+fi
+DEPLOY_KEY="${DEPLOY_KEY:-/root/.ssh/agents_kb_deploy}"
+
+if [ ! -d "$SOURCE/.git" ]; then
+  CODE_STATUS="source-missing"
+  echo "router source $SOURCE/.git not found: code NOT synced to GitHub" >&2
+elif [ ! -f "$DEPLOY_KEY" ]; then
+  CODE_STATUS="no-key"
+  echo "deploy key $DEPLOY_KEY not readable: router code NOT pushed" >&2
+else
+  export GIT_SSH_COMMAND="ssh -i $DEPLOY_KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+  # ff-only pull of main first: in this repo only the router writes main (agents live
+  # in agent/* branches), so fast-forward is the normal case; a non-ff would mean real
+  # divergence and we skip rather than merge on an unattended 03:15 run.
+  # || true: these must not abort under `set -e`; every failure path is handled by
+  # CODE_STATUS and reported, not by crashing the daily backup.
+  branch="$(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?')"
+  if [ "$branch" != main ]; then
+    CODE_STATUS="not-on-main"
+    echo "agents-kb HEAD is on '$branch', not main: router code NOT synced" >&2
+  elif ! git -C "$REPO" pull --ff-only --quiet origin main >/dev/null 2>&1; then
+    CODE_STATUS="no-ff"
+    echo "agents-kb main cannot fast-forward to origin/main (diverged?): router code NOT synced" >&2
+  else
+    rsync -a --delete \
+      --exclude='.git' --exclude='node_modules' --exclude='dist' \
+      --exclude='*.env' --exclude='secrets' \
+      "$SOURCE/" "$REPO/bb-messenger/"
+    git -C "$REPO" add -A bb-messenger >/dev/null 2>&1
+    if git -C "$REPO" diff --cached --quiet -- bb-messenger; then
+      CODE_STATUS=clean          # nothing changed since yesterday -- normal
+    elif git -C "$REPO" commit -q -m "chore(backup): sync router source $STAMP" -- bb-messenger >/dev/null 2>&1 \
+         && git -C "$REPO" push --quiet origin main >/dev/null 2>&1; then
+      CODE_STATUS=pushed
+    else
+      CODE_STATUS=failed
+      # Roll the local commit back so a failed push does not leave main ahead of
+      # origin and turn tomorrow's ff-only pull into a forced conflict.
+      git -C "$REPO" reset --soft HEAD~1 >/dev/null 2>&1 || true
+      git -C "$REPO" restore --staged bb-messenger >/dev/null 2>&1 || true
+      echo "router code commit/push FAILED: GitHub copy is stale" >&2
+    fi
+  fi
+  unset GIT_SSH_COMMAND
+fi
+
+STATUS=ok
+DUMP=""
+# A half-written .sql.gz is worse than none: it restores to a truncated schema. The
+# trap removes it on ANY exit path, including the failure cases below.
+cleanup_tmp() { [ -n "${DUMP:-}" ] && rm -f "$DUMP.tmp" 2>/dev/null || true; }
+trap cleanup_tmp EXIT
+
+if [ -n "$DB_URL" ]; then
+  DUMP="$BACKUP_DIR/bbx-schema-$STAMP.sql.gz"
+  # --schema=bbx only: the same cluster holds someone else's application tables, and a
+  # router backup must not quietly become a dump of the whole database.
+  #
+  # pg_dump runs INSIDE the postgres container because that is where pg_dump 16 lives;
+  # the host has no client tools at all (measured: "pg_dump: command not found"), and
+  # installing one on the host would pin the backup to a version match with the server
+  # that the container already guarantees. Server version and client version failing to
+  # match is a classic silent-truncation bug, so reuse the server's own binary.
+  #
+  # user and database are parsed from the DSN so there is one source of truth; the
+  # password never passes through argv here, only the URI.
+  # Deliberately simple splits, each measured against the real DSN: the user is the
+  # first segment after ://, the database is the last path segment after stripping any
+  # ?query. The first cut matched host:port instead of the user (returning a 48-char
+  # "user") and anchored the database on $, which fails on a ?sslmode= DSN -- both
+  # surfaced only as "no usable pg_dump", hiding that the DSN parse was what failed.
+  db_user="$(printf '%s' "$DB_URL" | sed -n 's#postgres://\([^:]*\):.*#\1#p')"
+  db_name="$(printf '%s' "$DB_URL" | sed 's/?.*//' | sed 's#.*/##')"
+  db_container="${BBX_BACKUP_PG_CONTAINER:-postgres}"
+  if [ -n "$db_user" ] && [ -n "$db_name" ] && docker inspect "$db_container" >/dev/null 2>&1; then
+    if docker exec "$db_container" pg_dump -U "$db_user" --schema=bbx --schema=todo --no-owner --no-privileges "$db_name" | gzip > "$DUMP.tmp"; then
+      mv "$DUMP.tmp" "$DUMP"
+    else
+      rm -f "$DUMP.tmp"; DUMP=""
+      STATUS="db-failed"
+      echo "pg_dump via container $db_container failed: bbx schema NOT backed up" >&2
+    fi
+  else
+    # Host client as a fallback for a deployment where the db is not containerized.
+    if command -v pg_dump >/dev/null 2>&1 && pg_dump --schema=bbx --schema=todo --no-owner --no-privileges "$DB_URL" | gzip > "$DUMP.tmp"; then
+      mv "$DUMP.tmp" "$DUMP"
+    else
+      rm -f "$DUMP.tmp"; DUMP=""
+      STATUS="db-failed"
+      echo "no usable pg_dump (container $db_container, host client): bbx schema NOT backed up" >&2
+    fi
+  fi
+else
+  STATUS="db-skipped"
+  echo "BBX_BACKUP_DB_URL not set: the bbx schema was NOT backed up" >&2
+fi
+
+# Retention only ever deletes files matching our own names, so a shared directory
+# cannot be pruned of someone else's data.
+find "$BACKUP_DIR" -maxdepth 1 -name 'agents-kb-*.bundle' -mtime "+$KEEP_DAYS" -delete
+find "$BACKUP_DIR" -maxdepth 1 -name 'bbx-schema-*.sql.gz' -mtime "+$KEEP_DAYS" -delete
+
+sha256sum "$BUNDLE" | sed 's/ /  bundle  /'
+[ -n "$DUMP" ] && sha256sum "$DUMP" | sed 's/ /  dump    /'
+
+# Register what exists in the queue database, and only after verification passed.
+#
+# The plugin cannot list this directory -- it runs inside the bb-server container with
+# no view of the host filesystem -- so /backup reads bbx.backup_artifact instead. Two
+# consequences of registering here rather than elsewhere:
+#   - nothing can be offered that was not actually written and verified: a row for a
+#     missing file would fail the send at upload time;
+#   - the sha256 travels with the file, so whoever receives it in chat can compare it
+#     against the journal line from the same run.
+if [ -n "$DB_URL" ] && [ "$STATUS" = ok ]; then
+  # psql is handed one complete statement per call. Numeric size is emitted without
+  # quotes (it is bigint) and the text fields are single-quoted -- names come from
+  # date/uuid ourselves, never from user input, and the container path has no shell
+  # to re-parse anything anyway, but quoting them keeps a stray space or quote in a
+  # filename from becoming a syntax error at 03:15 with nobody watching.
+  register() {
+    local kind="$1" path="$2" name="$3" size="$4" sum="$5"
+    docker exec "$db_container" psql -U "$db_user" -d "$db_name" -qtA -c \
+      "insert into bbx.backup_artifact (kind,file_path,file_name,size_bytes,sha256) values ('$kind','$path','$name',$size,'$sum')" \
+      >/dev/null
+  }
+  register bundle "$BUNDLE" "$(basename "$BUNDLE")" "$(stat -c %s "$BUNDLE")" \
+    "$(sha256sum "$BUNDLE" | cut -d' ' -f1)" || echo "warning: bundle not registered" >&2
+  if [ -n "$DUMP" ]; then
+    register dump "$DUMP" "$(basename "$DUMP")" "$(stat -c %s "$DUMP")" \
+      "$(sha256sum "$DUMP" | cut -d' ' -f1)" || echo "warning: dump not registered" >&2
+  fi
+fi
+# Verify the dump the same way the bundle was verified, and at the size level only:
+# decompress and check the last statement marker. A gzip that ends mid-dump would
+# restore to a partial schema, which is the failure mode nobody notices until a
+# restore. A full `psql < dump` rehearsal belongs in a restore runbook, not cron.
+if [ -n "$DUMP" ]; then
+  gunzip -c "$DUMP" | tail -5 | grep -q "PostgreSQL database dump complete" \
+    || { echo "dump verification FAILED (no completion marker)" >&2; STATUS="db-unverified"; }
+fi
+echo "backup $STATUS code=$CODE_STATUS dir=$BACKUP_DIR stamp=$STAMP"
+exit 0

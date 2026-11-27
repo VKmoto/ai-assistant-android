@@ -153,6 +153,35 @@ object TasksApi {
 
     data class PomodoroStats(val sessions: Int, val seconds: Int)
 
+    data class AgentAction(val id: String, val action: String, val entityId: String?, val reason: String?, val undone: Boolean)
+
+    suspend fun agentActions(client: OkHttpClient, config: TasksConfig, limit: Int = 20): List<AgentAction> =
+        withContext(Dispatchers.IO) {
+            val req = request(config, "/api/v1/agent-actions?limit=$limit").get().build()
+            client.newCall(req).execute().use { res ->
+                val body = res.body?.string().orEmpty()
+                if (!res.isSuccessful) throw IllegalStateException(errorMessage(body) ?: "HTTP ${res.code}")
+                val arr = JSONObject(body).getJSONArray("actions")
+                (0 until arr.length()).map {
+                    val o = arr.getJSONObject(it)
+                    AgentAction(
+                        id = o.optString("id"),
+                        action = o.optString("action"),
+                        entityId = if (o.isNull("entity_id")) null else o.optString("entity_id"),
+                        reason = if (o.isNull("reason")) null else o.optString("reason"),
+                        undone = !o.isNull("undone_at"),
+                    )
+                }
+            }
+        }
+
+    suspend fun undoAction(client: OkHttpClient, config: TasksConfig, id: String) =
+        withContext(Dispatchers.IO) {
+            val req = request(config, "/api/v1/agent-actions/$id/undo")
+                .post("{}".toRequestBody(jsonType)).build()
+            client.newCall(req).execute().use { it.body?.string() }
+        }
+
     suspend fun pomodoroStats(client: OkHttpClient, config: TasksConfig): PomodoroStats =
         withContext(Dispatchers.IO) {
             val req = request(config, "/api/v1/pomodoro/stats").get().build()

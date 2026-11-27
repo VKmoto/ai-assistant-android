@@ -136,6 +136,8 @@ fun TasksScreen(
     var reminderFor by remember { mutableStateOf<TaskItem?>(null) }
     var reminderAt by remember { mutableStateOf(DateTimeValue.nowMsk()) }
     var tab by remember { mutableIntStateOf(0) }
+    var showHistory by remember { mutableStateOf(false) }
+    var history by remember { mutableStateOf<List<TasksApi.AgentAction>>(emptyList()) }
     // Каналы выбирает человек: по умолчанию только телефон. «Слать сразу везде» —
     // плохой дефолт (MAX/почта могут быть лишними для бытовой задачи).
     var reminderChannels by remember { mutableStateOf(setOf("local")) }
@@ -175,6 +177,16 @@ fun TasksScreen(
             actions = {
                 IconButton(onClick = { refreshKey++ }) {
                     Icon(Icons.Filled.Refresh, contentDescription = "Обновить")
+                }
+                IconButton(onClick = {
+                    showHistory = true
+                    scope.launch {
+                        runCatching { TasksApi.agentActions(client, config, 20) }
+                            .onSuccess { history = it }
+                            .onFailure { e -> e.rethrowIfCancellation(); error = e.message }
+                    }
+                }) {
+                    Icon(Icons.Filled.Notifications, contentDescription = "История действий агента")
                 }
                 IconButton(onClick = {
                     settingsUrl = baseUrl
@@ -370,6 +382,50 @@ fun TasksScreen(
                     }
                 }
             },
+        )
+    }
+
+    if (showHistory) {
+        AlertDialog(
+            onDismissRequest = { showHistory = false },
+            title = { Text("Действия агента") },
+            text = {
+                if (history.isEmpty()) {
+                    Text("Пока пусто", style = MaterialTheme.typography.bodyMedium)
+                } else {
+                    LazyColumn(modifier = Modifier.height(360.dp)) {
+                        items(history) { a ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        "${a.action} ${a.entityId ?: ""}${if (a.undone) " · отменено" else ""}",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                    )
+                                    a.reason?.let {
+                                        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
+                                if (!a.undone) {
+                                    TextButton(onClick = {
+                                        scope.launch {
+                                            runCatching { TasksApi.undoAction(client, config, a.id) }
+                                                .onSuccess {
+                                                    history = history.map { if (it.id == a.id) it.copy(undone = true) else it }
+                                                    refreshKey++
+                                                }
+                                                .onFailure { e -> e.rethrowIfCancellation(); error = e.message }
+                                        }
+                                    }) { Text("Отменить") }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showHistory = false }) { Text("Закрыть") } },
         )
     }
 

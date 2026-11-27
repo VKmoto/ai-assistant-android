@@ -267,7 +267,8 @@ const server = createServer((req, res) => {
     }
     const undoMatch = /^\/api\/v1\/agent-actions\/([^/]+)\/undo$/.exec(path);
     if (undoMatch && method === "POST") {
-      if (!isService) return fail(res, 403, "service token required");
+      // Undo доступен и приложению: владелец отменяет действие агента сам, не прося
+      // об этом агента. Service-токен по-прежнему нужен для undo из CLI.
       const ok = await store.undoAction(undoMatch[1]!);
       return ok ? sendJson(res, 200, { ok: true }) : fail(res, 404, "action not found or already undone");
     }
