@@ -3,7 +3,8 @@ package com.app.assistant.ui.screen
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.input.pointer.pointerInput
 import kotlin.math.roundToInt
@@ -379,11 +380,11 @@ fun TasksScreen(
         TaskDetailsDialog(
             task = selected!!,
             onDismiss = { selected = null },
-            onMove = { status ->
+            onUpdateTitle = { newTitle ->
                 val task = selected
                 if (task != null) {
                     scope.launch {
-                        runCatching { TasksApi.move(client, config, task.id, status) }
+                        runCatching { TasksApi.updateTitle(client, config, task.id, newTitle) }
                             .onSuccess { selected = null; refreshKey++ }
                             .onFailure { e -> e.rethrowIfCancellation(); error = e.message }
                     }
@@ -830,36 +831,66 @@ private fun KanbanBoard(
     // Четыре равные колонки на телефоне давали ~70 dp — текст рвался по буквам
     // («Тест email-н апом...»). Колонки фиксированной ширины, канбан прокручивается
     // по горизонтали — как в обычных канбан-досках.
-    Row(
-        modifier = Modifier.fillMaxSize().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        STATUS_COLUMNS.forEach { (status, label) ->
-            val columnTasks = tasks.filter { it.status == status }
-            Column(
-                modifier = Modifier
-                    .width(260.dp)
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState()),
-            ) {
-                Text(
-                    "$label (${columnTasks.size})",
-                    style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier.padding(vertical = 6.dp),
-                )
-                columnTasks.forEach { task ->
-                    DraggableTaskCard(
-                        task = task,
-                        onTaskClick = { onTaskClick(task) },
-                        onDrop = { steps ->
-                            // Карточку тащат влево/вправо: каждые 260 dp (ширина колонки)
-                            // — одна колонка статуса. Так drag работает и в горизонтально
-                            // прокручиваемом канбане, где координаты колонок уезжают.
-                            val index = STATUS_COLUMNS.indexOfFirst { it.first == task.status }
-                            val target = (index + steps).coerceIn(0, STATUS_COLUMNS.lastIndex)
-                            if (target != index) onMove(task, STATUS_COLUMNS[target].first)
-                        },
+    // Заголовок колонки — ручка прокрутки доски: тянуть доску вбок за карточку теперь
+    // не нужно (раньше любое движение по карточке либо скроллило доску, либо тащило
+    // задачу — приходилось ждать долгого нажатия). Тело доски и заголовок двигаются от
+    // одного состояния прокрутки, поэтому «линейка» реально тянет колонки.
+    val boardScroll = rememberScrollState()
+    Column(modifier = Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(boardScroll)
+                .padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            STATUS_COLUMNS.forEach { (status, label) ->
+                Column(modifier = Modifier.width(260.dp)) {
+                    Text(
+                        "$label (${tasks.count { it.status == status }})",
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.padding(top = 6.dp, bottom = 4.dp),
                     )
+                    HorizontalDivider(
+                        thickness = 2.dp,
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f),
+                    )
+                }
+            }
+            Spacer(Modifier.width(16.dp))
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .clipToBounds()
+                .offset { androidx.compose.ui.unit.IntOffset(-boardScroll.value, 0) }
+                .padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            STATUS_COLUMNS.forEach { (status, label) ->
+                val columnTasks = tasks.filter { it.status == status }
+                Column(
+                    modifier = Modifier
+                        .width(260.dp)
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState()),
+                ) {
+                    columnTasks.forEach { task ->
+                        DraggableTaskCard(
+                            task = task,
+                            onTaskClick = { onTaskClick(task) },
+                            onDrop = { steps ->
+                                // Карточку тащат влево/вправо: каждые 260 dp (ширина
+                                // колонки) — одна колонка статуса. Так drag работает и в
+                                // горизонтально прокручиваемом канбане, где координаты
+                                // колонок уезжают.
+                                val index = STATUS_COLUMNS.indexOfFirst { it.first == task.status }
+                                val target = (index + steps).coerceIn(0, STATUS_COLUMNS.lastIndex)
+                                if (target != index) onMove(task, STATUS_COLUMNS[target].first)
+                            },
+                        )
+                    }
                 }
             }
         }
@@ -881,10 +912,13 @@ private fun DraggableTaskCard(
             .padding(bottom = 6.dp)
             .offset { androidx.compose.ui.unit.IntOffset(offsetX.roundToInt(), 0) }
             .pointerInput(task.id, task.status) {
-                detectDragGesturesAfterLongPress(
-                    onDrag = { change, dragAmount ->
+                // detectHorizontalDragGestures, а не drag «вообще»: вертикальные жесты
+                // остаются колонке (её прокрутка), а карточка едет сразу, как только
+                // палец пошёл вбок — долгий тап больше не нужен.
+                detectHorizontalDragGestures(
+                    onHorizontalDrag = { change, dragAmount ->
                         change.consume()
-                        offsetX += dragAmount.x
+                        offsetX += dragAmount
                     },
                     onDragEnd = {
                         val steps = if (kotlin.math.abs(offsetX) < columnPx * 0.4f) 0 else (offsetX / columnPx).roundToInt()
@@ -903,14 +937,16 @@ private fun DraggableTaskCard(
 private fun TaskDetailsDialog(
     task: TaskItem,
     onDismiss: () -> Unit,
-    onMove: (String) -> Unit,
     onAddReminder: () -> Unit,
     onUpdateDue: (DateTimeValue) -> Unit,
+    onUpdateTitle: (String) -> Unit,
     onComplete: () -> Unit,
 ) {
     // Срок можно сдвинуть прямо здесь: раньше изменить дату/время задачи было нельзя
     // вовсе (только удалить и создать заново).
     var editing by remember { mutableStateOf(false) }
+    var editingTitle by remember { mutableStateOf(false) }
+    var titleDraft by remember(task.id) { mutableStateOf(task.title) }
     var due by remember(task.id, task.dueAt) {
         mutableStateOf(task.dueAt?.let { DateTimeValue.fromIso(it) } ?: DateTimeValue.nowMsk())
     }
@@ -941,15 +977,30 @@ private fun TaskDetailsDialog(
                         TextButton(onClick = { editing = false }) { Text("Отмена") }
                     }
                 }
+                Spacer(Modifier.height(8.dp))
+                if (!editingTitle) {
+                    TextButton(onClick = { titleDraft = task.title; editingTitle = true }, modifier = Modifier.fillMaxWidth()) {
+                        Text("Изменить текст…")
+                    }
+                } else {
+                    OutlinedTextField(
+                        value = titleDraft,
+                        onValueChange = { titleDraft = it },
+                        label = { Text("Название задачи") },
+                        singleLine = false,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(
+                            enabled = titleDraft.isNotBlank() && titleDraft.trim() != task.title,
+                            onClick = { onUpdateTitle(titleDraft.trim()) },
+                        ) { Text("Сохранить") }
+                        TextButton(onClick = { editingTitle = false }) { Text("Отмена") }
+                    }
+                }
                 Spacer(Modifier.height(12.dp))
                 TextButton(onClick = onAddReminder, modifier = Modifier.fillMaxWidth()) {
                     Text("Напоминание…")
-                }
-                Text("Переместить:", style = MaterialTheme.typography.labelMedium)
-                STATUS_COLUMNS.forEach { (status, label) ->
-                    if (status != task.status) {
-                        TextButton(onClick = { onMove(status) }, modifier = Modifier.fillMaxWidth()) { Text(label) }
-                    }
                 }
             }
         },

@@ -98,6 +98,19 @@ object TasksApi {
         }
     }
 
+    /** Переименовать задачу прямо из карточки. */
+    suspend fun updateTitle(client: OkHttpClient, config: TasksConfig, id: String, title: String): TaskItem =
+        withContext(Dispatchers.IO) {
+            val payload = JSONObject().apply { put("title", title) }
+            val req = request(config, "/api/v1/tasks/$id")
+                .patch(payload.toString().toRequestBody(jsonType)).build()
+            client.newCall(req).execute().use { res ->
+                val body = res.body?.string().orEmpty()
+                if (!res.isSuccessful) throw IllegalStateException(errorMessage(body) ?: "HTTP ${res.code}")
+                parseTask(JSONObject(body))
+            }
+        }
+
     /** Сдвинуть срок задачи: owner меняет дату/время прямо в карточке. */
     suspend fun updateDue(client: OkHttpClient, config: TasksConfig, id: String, dueAt: String?): TaskItem =
         withContext(Dispatchers.IO) {
