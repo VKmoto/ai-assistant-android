@@ -23,6 +23,17 @@ class FlexibleLlmAdapter(
 ) : LlmAdapter {
     private val json = Json { ignoreUnknownKeys = true }
 
+    /**
+     * Клиент для стрима: общий имеет readTimeout 60 с, а долгий ход агента (голос через
+     * bbx-voice) легко идёт 1–3 минуты. Пауза между чанками там может быть больше
+     * минуты (агент работает инструментами), и OkHttp рвал соединение; голосовой шлюз
+     * видел уход клиента и по правилу страховки дублировал ответ текстом в MAX
+     * (жалоба владельца 2026-11-27: «ответила вместо голоса в Макс»).
+     */
+    private val streamClient: OkHttpClient by lazy {
+        client.newBuilder().readTimeout(300, java.util.concurrent.TimeUnit.SECONDS).build()
+    }
+
     override suspend fun generateResponse(
         systemContext: String,
         messages: List<LlmMessage>
@@ -114,7 +125,7 @@ class FlexibleLlmAdapter(
 
         var networkErrorMessage: String? = null
         val response = try {
-            client.newCall(request).execute()
+            streamClient.newCall(request).execute()
         } catch (e: UnknownHostException) {
             networkErrorMessage = "Похоже, устройство без сети. Проверьте подключение."
             null
