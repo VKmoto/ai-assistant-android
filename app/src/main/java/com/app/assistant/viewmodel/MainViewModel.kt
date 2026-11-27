@@ -749,7 +749,7 @@ class MainViewModel(
                     }
             } catch (e: Exception) {
                 Log.e("MainViewModel", "Streaming error", e)
-                fullResponse = "Error occurred while streaming response."
+                fullResponse = "Ошибка при получении ответа. Попробуйте ещё раз."
             }
 
             val index = chatList.indexOfFirst { it.id == loadingItemId }

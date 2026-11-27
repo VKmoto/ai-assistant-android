@@ -109,6 +109,8 @@ fun TasksScreen(
     var settingsToken by remember { mutableStateOf("") }
     var newTitle by remember { mutableStateOf("") }
     var newDue by remember { mutableStateOf("") }
+    var reminderFor by remember { mutableStateOf<TaskItem?>(null) }
+    var reminderAt by remember { mutableStateOf("") }
 
     val ready = baseUrl.isNotBlank() && token.isNotBlank()
     val config = TasksConfig(baseUrl, token)
@@ -297,6 +299,10 @@ fun TasksScreen(
                     }
                 }
             },
+            onAddReminder = {
+                reminderAt = ""
+                reminderFor = selected
+            },
             onComplete = {
                 val task = selected
                 if (task != null) {
@@ -307,6 +313,46 @@ fun TasksScreen(
                     }
                 }
             },
+        )
+    }
+
+    if (reminderFor != null) {
+        AlertDialog(
+            onDismissRequest = { reminderFor = null },
+            title = { Text("Напоминание") },
+            text = {
+                Column {
+                    Text(reminderFor!!.title, style = MaterialTheme.typography.bodyMedium)
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = reminderAt,
+                        onValueChange = { reminderAt = it },
+                        label = { Text("Когда (27.11.2026 09:00, МСК)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Придёт на телефон, в MAX и на почту.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val task = reminderFor
+                    val whenText = reminderAt.trim()
+                    if (task != null && whenText.isNotEmpty()) {
+                        scope.launch {
+                            runCatching { TasksApi.createReminder(client, config, task.id, whenText) }
+                                .onSuccess { reminderFor = null; selected = null; refreshKey++ }
+                                .onFailure { error = it.message }
+                        }
+                    }
+                }) { Text("Поставить") }
+            },
+            dismissButton = { TextButton(onClick = { reminderFor = null }) { Text("Отмена") } },
         )
     }
 }
@@ -376,6 +422,7 @@ private fun TaskDetailsDialog(
     task: TaskItem,
     onDismiss: () -> Unit,
     onMove: (String) -> Unit,
+    onAddReminder: () -> Unit,
     onComplete: () -> Unit,
 ) {
     AlertDialog(
@@ -390,6 +437,9 @@ private fun TaskDetailsDialog(
                 Text("Статус: ${statusLabel(task.status)}", style = MaterialTheme.typography.bodySmall)
                 dueLabel(task.dueAt)?.let { Text("Срок: $it", style = MaterialTheme.typography.bodySmall) }
                 Spacer(Modifier.height(12.dp))
+                TextButton(onClick = onAddReminder, modifier = Modifier.fillMaxWidth()) {
+                    Text("Напоминание…")
+                }
                 Text("Переместить:", style = MaterialTheme.typography.labelMedium)
                 STATUS_COLUMNS.forEach { (status, label) ->
                     if (status != task.status) {

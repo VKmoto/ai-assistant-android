@@ -37,10 +37,10 @@ class GetWeatherUseCase(
                         if (!aiResponse.isNullOrEmpty()) {
                             onSuccess(aiResponse, location)
                         } else {
-                            onFailure("Seems weather report is not available, please try again.")
+                            onFailure("Прогноз погоды сейчас недоступен, попробуйте ещё раз.")
                         }
                     } else {
-                        onFailure("Seems weather report is not available, please try again.")
+                        onFailure("Прогноз погоды сейчас недоступен, попробуйте ещё раз.")
                     }
                 } else {
                     onFailure("I can not find such location, please try again.")
@@ -56,7 +56,7 @@ class GetWeatherUseCase(
             }
         } catch (e: Exception) {
             System.err.println("Error fetching weather: ${e.message}")
-            onFailure("Something went wrong, please try again.")
+            onFailure("Что-то пошло не так, попробуйте ещё раз.")
         }
     }
 
@@ -78,10 +78,10 @@ class GetWeatherUseCase(
             if (!aiResponse.isNullOrEmpty()) {
                 onSuccess(aiResponse, city)
             } else {
-                onFailure("Seems weather report is not available, please try again.")
+                onFailure("Прогноз погоды сейчас недоступен, попробуйте ещё раз.")
             }
         } else {
-            onFailure("Seems weather report is not available, please try again.")
+            onFailure("Прогноз погоды сейчас недоступен, попробуйте ещё раз.")
         }
     }
 

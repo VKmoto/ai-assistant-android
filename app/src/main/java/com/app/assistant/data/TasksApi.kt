@@ -106,6 +106,26 @@ object TasksApi {
             }
         }
 
+    /** Напоминание на задачу: время в формате человека (27.11.2026 09:00, МСК). */
+    suspend fun createReminder(
+        client: OkHttpClient,
+        config: TasksConfig,
+        taskId: String,
+        fireAt: String,
+        channels: List<String> = listOf("local", "max", "email"),
+    ) = withContext(Dispatchers.IO) {
+        val payload = JSONObject()
+            .put("fire_at", toIsoOrNull(fireAt) ?: fireAt)
+            .put("channels", org.json.JSONArray(channels))
+        val req = request(config, "/api/v1/tasks/$taskId/reminders")
+            .post(payload.toString().toRequestBody(jsonType))
+            .build()
+        client.newCall(req).execute().use { res ->
+            val body = res.body?.string().orEmpty()
+            if (!res.isSuccessful) throw IllegalStateException(errorMessage(body) ?: "HTTP ${res.code}")
+        }
+    }
+
     suspend fun dueReminders(client: OkHttpClient, config: TasksConfig): List<DueReminder> =
         withContext(Dispatchers.IO) {
             val req = request(config, "/api/v1/reminders/due").get().build()

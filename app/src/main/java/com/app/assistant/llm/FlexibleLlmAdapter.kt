@@ -54,21 +54,21 @@ class FlexibleLlmAdapter(
                         val errorBody = response.body?.string() ?: ""
                         Log.e("FlexibleLlmAdapter", "API request failed with code ${response.code}: $errorBody")
                         if (response.code == 401) {
-                            return@withContext """{"error_code": 401, "msg": "API key is missing or invalid."}"""
+                            return@withContext """{"error_code": 401, "msg": "API-ключ отсутствует или неверен."}"""
                         }
-                        val errMsg = extractErrorMessage(errorBody) ?: "API error (HTTP ${response.code})."
+                        val errMsg = extractErrorMessage(errorBody) ?: "Ошибка API (HTTP ${response.code})."
                         return@withContext """{"error_code": ${response.code}, "msg": "$errMsg"}"""
                     }
                     response.body!!.string()
                 }
             } catch (e: UnknownHostException) {
-                """{"error_code": 503, "msg": "Seems this device is offline. Maybe try checking data connection."}"""
+                """{"error_code": 503, "msg": "Похоже, устройство без сети. Проверьте подключение."}"""
             } catch (e: Exception) {
                 Log.e("FlexibleLlmAdapter", "Error during LLM API call", e)
                 val msg = if (e is IOException && e.message?.contains("Insecure HTTP") == true) {
                     e.message!!
                 } else {
-                    "Seems some issue in LLM server. Please try again."
+                    "Проблема на стороне сервера модели. Попробуйте ещё раз."
                 }
                 """{"error_code": 500, "msg": "$msg"}"""
             }
@@ -116,7 +116,7 @@ class FlexibleLlmAdapter(
         val response = try {
             client.newCall(request).execute()
         } catch (e: UnknownHostException) {
-            networkErrorMessage = "Seems this device is offline. Maybe try checking data connection."
+            networkErrorMessage = "Похоже, устройство без сети. Проверьте подключение."
             null
         } catch (e: Exception) {
             if (e is IOException && e.message?.contains("Insecure HTTP") == true) {
@@ -126,14 +126,14 @@ class FlexibleLlmAdapter(
         }
 
         if (response == null) {
-            emit(networkErrorMessage ?: "Seems this device is offline or LLM server is unreachable.")
+            emit(networkErrorMessage ?: "Похоже, устройство без сети или сервер модели недоступен.")
             return@flow
         }
 
         if (!response.isSuccessful) {
             val errorBody = response.body?.string() ?: ""
             Log.e("FlexibleLlmAdapter", "API streaming request failed with code ${response.code}: $errorBody")
-            val errMsg = extractErrorMessage(errorBody) ?: "API error (HTTP ${response.code})."
+            val errMsg = extractErrorMessage(errorBody) ?: "Ошибка API (HTTP ${response.code})."
             emit("Error: $errMsg")
             response.close()
             return@flow

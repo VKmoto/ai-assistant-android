@@ -127,7 +127,7 @@ class GoogleTtsApiManager(
     private suspend fun fetchGoogleTts(text: String): ByteArray = withContext(Dispatchers.IO) {
         val apiKey = SpeechConfig.GoogleTts.getApiKey(settingsRepository)
         if (apiKey.isEmpty()) {
-            throw Exception("Google Cloud TTS API key is empty.")
+            throw Exception("Не задан API-ключ Google Cloud TTS.")
         }
         val url = "${SpeechConfig.GoogleTts.BASE_URL}?key=$apiKey"
         
