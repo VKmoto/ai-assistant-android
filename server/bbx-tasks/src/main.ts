@@ -183,6 +183,12 @@ const server = createServer((req, res) => {
       }
     }
 
+    const restoreMatch = /^\/api\/v1\/tasks\/([^/]+)\/restore$/.exec(path);
+    if (restoreMatch && method === "POST") {
+      const ok = await store.restoreTask(restoreMatch[1]!, actor);
+      return ok ? sendJson(res, 200, { ok: true }) : fail(res, 404, "task not found or not deleted");
+    }
+
     const completeMatch = /^\/api\/v1\/tasks\/([^/]+)\/complete$/.exec(path);
     if (completeMatch && method === "POST") {
       const before = await store.getTask(completeMatch[1]!);

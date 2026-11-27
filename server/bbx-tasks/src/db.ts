@@ -392,6 +392,16 @@ export class Store {
     return true;
   }
 
+  /** Вернуть удалённую задачу: soft-delete обратим (агент мог удалить не то). */
+  async restoreTask(id: string, actor = "user"): Promise<boolean> {
+    const r = await this.pool.query(
+      "UPDATE todo.tasks SET deleted_at = NULL, updated_at = now() WHERE id=$1 AND deleted_at IS NOT NULL",
+      [id],
+    );
+    if ((r.rowCount ?? 0) > 0) await this.audit(actor, "restore", "task", id, null, await this.getTask(id));
+    return (r.rowCount ?? 0) > 0;
+  }
+
   async listSubtasks(parentId: string): Promise<TaskRow[]> {
     const r = await this.pool.query<TaskRow>(
       "SELECT * FROM todo.tasks WHERE parent_id=$1 AND deleted_at IS NULL ORDER BY created_at",

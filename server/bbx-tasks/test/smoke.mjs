@@ -126,6 +126,21 @@ await check("завершение задачи", async () => {
   if (r.status !== 200 || r.data.status !== "done") throw new Error(JSON.stringify(r));
 });
 
+await check("удаление задачи и restore", async () => {
+  const made = await api("POST", "/api/v1/tasks", DEVICE, { title: "smoke: на удаление" });
+  if (made.status !== 201) throw new Error(JSON.stringify(made));
+  const id = made.data.id;
+  const del = await api("DELETE", `/api/v1/tasks/${id}`, DEVICE);
+  if (del.status !== 200) throw new Error(JSON.stringify(del));
+  const list = await api("GET", "/api/v1/tasks?view=kanban");
+  if (list.data.tasks.some((t) => t.id === id)) throw new Error("удалённая задача в списке");
+  const back = await api("POST", `/api/v1/tasks/${id}/restore`, DEVICE);
+  if (back.status !== 200) throw new Error(JSON.stringify(back));
+  const list2 = await api("GET", "/api/v1/tasks?view=kanban");
+  if (!list2.data.tasks.some((t) => t.id === id)) throw new Error("restore не вернул задачу");
+  await api("DELETE", `/api/v1/tasks/${id}`, DEVICE);
+});
+
 await check("помодоро: старт → state → finish → stats", async () => {
   const start = await api("POST", "/api/v1/pomodoro/start", DEVICE, { duration_sec: 60 });
   if (start.status !== 201) throw new Error(JSON.stringify(start));

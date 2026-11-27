@@ -78,6 +78,8 @@ function usage(): never {
   tasks list [--view inbox|today|upcoming|kanban|project:<id>] [--q текст] [--json]
   tasks today [--json]
   tasks done <id>
+  tasks rm <id>                          # удалить задачу (soft-delete, обратимо)
+  tasks restore <id>                     # вернуть удалённую задачу
   tasks move <id> <todo|in_progress|waiting|done|cancelled>
   tasks subtask <parent_id> "<заголовок>"
   tasks remind <id> "<2026-11-27 09:00>" [--channels local,max,email]
@@ -137,6 +139,22 @@ async function main(): Promise<void> {
       if (!id) usage();
       const task = (await api("POST", `/api/v1/tasks/${id}/complete`)) as Record<string, unknown>;
       console.log(json ? JSON.stringify(task, null, 2) : `готово: ${fmt(task)}`);
+      return;
+    }
+    case "rm": {
+      const ids = positional;
+      if (ids.length === 0) usage();
+      for (const id of ids) {
+        await api("DELETE", `/api/v1/tasks/${id}`);
+        console.log(`удалена: ${id}`);
+      }
+      return;
+    }
+    case "restore": {
+      const id = positional[0];
+      if (!id) usage();
+      await api("POST", `/api/v1/tasks/${id}/restore`);
+      console.log(`восстановлена: ${id}`);
       return;
     }
     case "move": {
