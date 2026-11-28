@@ -141,6 +141,17 @@ await check("удаление задачи и restore", async () => {
   await api("DELETE", `/api/v1/tasks/${id}`, DEVICE);
 });
 
+await check("дайджест: группы по срокам", async () => {
+  const r = await api("GET", "/api/v1/digests/preview?template=morning");
+  if (r.status !== 200) throw new Error(JSON.stringify(r));
+  const text = r.data.text;
+  if (!text.startsWith("☀️")) throw new Error(text);
+  // Список под «Сегодня» не должен содержать задачи с другими сроками.
+  if (text.includes("Сегодня задач нет") && /Сегодня задач нет\.\n1\./.test(text)) {
+    throw new Error("под «нет задач» снова висит список");
+  }
+});
+
 await check("помодоро: старт → state → finish → stats", async () => {
   const start = await api("POST", "/api/v1/pomodoro/start", DEVICE, { duration_sec: 60 });
   if (start.status !== 201) throw new Error(JSON.stringify(start));

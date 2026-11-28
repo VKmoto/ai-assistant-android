@@ -669,34 +669,61 @@ export class Store {
   }
 
   /** Текст дайджеста из текущих задач: только факты, без «умных» выводов. */
+  /**
+   * Текст дайджеста: «сегодня / просрочено / дальше», а не «сегодня + что попало».
+   *
+   * Раньше под счётчиком «Сегодня 0 задач» выводился топ-3 любых открытых задач без
+   * фильтра по дате — владелец читал это как «две задачи на сегодня» (2026-11-28).
+   * Теперь каждая группа отражает только свой срок, а будущее честно подписано «Дальше».
+   */
   async digestText(template: string): Promise<string> {
-    const counts = await this.pool.query<{ today: string; overdue: string; open: string; done_today: string }>(
+    const open = "status IN ('todo','in_progress','waiting')";
+    const todayExpr = "(due_at AT TIME ZONE 'Europe/Moscow')::date";
+    const counts = await this.pool.query<{ today: string; overdue: string; open: string; done_today: string; tomorrow: string }>(
       `SELECT
-         count(*) FILTER (WHERE status IN ('todo','in_progress','waiting')
-                            AND due_at IS NOT NULL
-                            AND (due_at AT TIME ZONE 'Europe/Moscow')::date = (now() AT TIME ZONE 'Europe/Moscow')::date)::text AS today,
-         count(*) FILTER (WHERE status IN ('todo','in_progress','waiting')
-                            AND due_at IS NOT NULL
-                            AND (due_at AT TIME ZONE 'Europe/Moscow')::date < (now() AT TIME ZONE 'Europe/Moscow')::date)::text AS overdue,
-         count(*) FILTER (WHERE status IN ('todo','in_progress','waiting'))::text AS open,
-         count(*) FILTER (WHERE status='done'
-                            AND (completed_at AT TIME ZONE 'Europe/Moscow')::date = (now() AT TIME ZONE 'Europe/Moscow')::date)::text AS done_today
+         count(*) FILTER (WHERE ${open} AND due_at IS NOT NULL AND ${todayExpr} = (now() AT TIME ZONE 'Europe/Moscow')::date)::text AS today,
+         count(*) FILTER (WHERE ${open} AND due_at IS NOT NULL AND ${todayExpr} < (now() AT TIME ZONE 'Europe/Moscow')::date)::text AS overdue,
+         count(*) FILTER (WHERE ${open})::text AS open,
+         count(*) FILTER (WHERE status='done' AND (completed_at AT TIME ZONE 'Europe/Moscow')::date = (now() AT TIME ZONE 'Europe/Moscow')::date)::text AS done_today,
+         count(*) FILTER (WHERE ${open} AND due_at IS NOT NULL AND ${todayExpr} = (now() AT TIME ZONE 'Europe/Moscow')::date + 1)::text AS tomorrow
        FROM todo.tasks WHERE deleted_at IS NULL`,
     );
     const row = counts.rows[0]!;
-    const top = await this.pool.query<{ title: string }>(
-      `SELECT title FROM todo.tasks
-        WHERE deleted_at IS NULL AND status IN ('todo','in_progress','waiting')
-        ORDER BY priority, due_at NULLS LAST LIMIT 3`,
-    );
-    const list = top.rows.map((r, i) => `${i + 1}. ${r.title}`).join("\n");
+
+    const pick = async (when: "today" | "overdue" | "ahead" | "tomorrow", limit: number, dateOnly: boolean) => {
+      const cond =
+        when === "today" ? `${todayExpr} = (now() AT TIME ZONE 'Europe/Moscow')::date`
+        : when === "overdue" ? `${todayExpr} < (now() AT TIME ZONE 'Europe/Moscow')::date`
+        : when === "tomorrow" ? `${todayExpr} = (now() AT TIME ZONE 'Europe/Moscow')::date + 1`
+        : `${todayExpr} > (now() AT TIME ZONE 'Europe/Moscow')::date`;
+      const r = await this.pool.query<{ title: string; at: string | null }>(
+        `SELECT title,
+                to_char(due_at AT TIME ZONE 'Europe/Moscow', '${dateOnly ? "DD.MM HH24:MI" : "HH24:MI"}') AS at
+           FROM todo.tasks
+          WHERE deleted_at IS NULL AND ${open} AND due_at IS NOT NULL AND ${cond}
+          ORDER BY priority, due_at LIMIT ${limit}`,
+      );
+      return r.rows;
+    };
+    const numbered = (rows: Array<{ title: string; at: string | null }>) =>
+      rows.map((r, i) => `${i + 1}. ${r.title}${r.at ? ` — ${r.at}` : ""}`).join("\n");
+
     if (template === "evening") {
-      return `🌙 Итоги дня: выполнено ${row.done_today}, осталось ${row.open}.` +
-        (row.overdue !== "0" ? ` Просрочено: ${row.overdue}.` : "") + (list ? `\nНа завтра:\n${list}` : "");
+      const tomorrow = await pick("tomorrow", 5, false);
+      const parts = [`🌙 Итоги дня: выполнено ${row.done_today}, осталось ${row.open}.`];
+      if (row.overdue !== "0") parts.push(`Просрочено: ${row.overdue} — перенесите или закройте.`);
+      parts.push(tomorrow.length > 0 ? `Завтра:\n${numbered(tomorrow)}` : "На завтра задач нет.");
+      return parts.join("\n");
     }
-    return `☀️ Доброе утро. Сегодня ${row.today} задач` +
-      (row.overdue !== "0" ? `, просрочено ${row.overdue}` : "") +
-      (list ? `:\n${list}` : ".");
+
+    const today = await pick("today", 7, false);
+    const overdue = await pick("overdue", 5, true);
+    const ahead = await pick("ahead", 3, true);
+    const parts: string[] = ["☀️ Доброе утро."];
+    parts.push(row.today === "0" ? "Сегодня задач нет." : `Сегодня ${row.today}:\n${numbered(today)}`);
+    if (overdue.length > 0) parts.push(`Просрочено ${row.overdue}:\n${numbered(overdue)}`);
+    if (ahead.length > 0) parts.push(`Дальше:\n${numbered(ahead)}`);
+    return parts.join("\n");
   }
 
   async listDigests(): Promise<unknown[]> {

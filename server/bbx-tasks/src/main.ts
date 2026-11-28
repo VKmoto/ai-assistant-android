@@ -277,6 +277,12 @@ const server = createServer((req, res) => {
     }
 
     // -------------------------------------------------------- журнал и undo
+    // Предпросмотр дайджеста: и тест, и приложение могут показать текст, не дожидаясь cron.
+    if (path === "/api/v1/digests/preview" && method === "GET") {
+      const template = url.searchParams.get("template") === "evening" ? "evening" : "morning";
+      return sendJson(res, 200, { template, text: await store.digestText(template) });
+    }
+
     if (path === "/api/v1/agent-actions" && method === "GET") {
       const limit = Number(url.searchParams.get("limit") ?? 20);
       return sendJson(res, 200, { actions: await store.listAgentActions(Number.isFinite(limit) ? limit : 20) });
